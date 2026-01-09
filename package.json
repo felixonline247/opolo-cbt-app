@@ -10,12 +10,15 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
-    "@tailwindcss/postcss": "^4.1.18",
     "lucide-react": "latest",
     "next": "15.1.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "resend": "^4.0.0"
+    "resend": "^4.0.0",
+    "tailwindcss": "latest",
+    "@tailwindcss/postcss": "latest",
+    "postcss": "latest"
+  
   },
   "devDependencies": {
     "@types/node": "^20",
