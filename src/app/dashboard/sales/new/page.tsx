@@ -12,6 +12,7 @@ export default function NewSalePage() {
   const [service, setService] = useState("JAMB CBT Prep");
   const [amount, setAmount] = useState("5000");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [showReceipt, setShowReceipt] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
