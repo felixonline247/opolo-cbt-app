@@ -1,4 +1,4 @@
-import { ArrowUpRight, TrendingUp, Users, CreditCard } from "lucide-react";
+import { Users, TrendingUp, ShieldCheck } from "lucide-react";
 
 export default function AdminDashboardPage() {
   return (
