@@ -1,4 +1,4 @@
-import { Users, TrendingUp, ShieldCheck } from "lucide-react";
+import { Users, TrendingUp, ShieldCheck, CreditCard } from "lucide-react";
 
 export default function AdminDashboardPage() {
   return (
