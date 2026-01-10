@@ -9,7 +9,7 @@ export default function NewSalePage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   // Form State
-const [showReceipt, setShowReceipt] = useState(false); ] = useState(false);
+const [showReceipt, setShowReceipt] = useState(false);
 const [clientName, setClientName] = useState("");
 const [service, setService] = useState("JAMB CBT Prep");
 const [amount, setAmount] = useState("5000");
