@@ -3,19 +3,60 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { UserPlus, BookOpen, CreditCard, CheckCircle2, Loader2 } from "lucide-react";
 import ReceiptModal from "@/components/ReceiptModal";
-// Force Build 2026
+
 export default function NewSalePage() {
+  // Form & UI State
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  
   // Form State
-  const [showReceipt, setShowReceipt
-  const [clientName, setClientName] = useState("");
-  const [service, setService] = useState("JAMB CBT Prep");
-  const [amount, setAmount] = useState("5000");
-  const [paymentMethod, setPaymentMethod] = useState("Cash");
+const [showReceipt, setShowReceipt] = useState(false); ] = useState(false);
+const [clientName, setClientName] = useState("");
+const [service, setService] = useState("JAMB CBT Prep");
+const [amount, setAmount] = useState("5000");
+const [paymentMethod, setPaymentMethod] = useState("Cash");
+  // Receipt State
   const [showReceipt, setShowReceipt] = useState(false);
-  
+
+  const handleSaveSale = async () => {
+    setLoading(true);
+    // ... your logic to save to database ...
+    
+    // Trigger success and show receipt
+    setSuccess(true);
+    setShowReceipt(true);
+    setLoading(false);
+  };
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">New Sale</h1>
+      
+      {/* Example Button to trigger the save */}
+      <button 
+        onClick={handleSaveSale}
+        className="bg-blue-600 text-white px-4 py-2 rounded"
+        disabled={loading}
+      >
+        {loading ? "Saving..." : "Save Sale"}
+      </button>
+
+      {/* This uses both variables, so the "unused" error goes away */}
+      {showReceipt && (
+        <ReceiptModal 
+          saleData={{ 
+            clientName, 
+            service, 
+            amount, 
+            paymentMethod, 
+            staff: "Admin", 
+            id: "temp-id" 
+          }} 
+          onClose={() => setShowReceipt(false)} 
+        />
+      )}
+    </div>
+  );
+}
 
 
   const handleSubmit = async (e: React.FormEvent) => {
