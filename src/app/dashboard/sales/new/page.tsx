@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { UserPlus, BookOpen, CreditCard, CheckCircle2, Loader2 } from "lucide-react";
-
+// Force Build 2026
 export default function NewSalePage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
