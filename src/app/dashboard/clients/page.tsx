@@ -14,18 +14,17 @@ export default function ClientsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // --- BULK & FILTER STATE ---
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [targetType, setTargetType] = useState<"parent" | "student">("student");
   const [serviceFilter, setServiceFilter] = useState("All");
-  const [paymentFilter, setPaymentFilter] = useState("All"); // New Filter
+  const [paymentFilter, setPaymentFilter] = useState("All");
 
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
     parent_name: "",
-    last_service: "New Registration",
+    last_service: "JAMB CBT Prep",
     payment_status: "Paid"
   });
 
@@ -42,11 +41,38 @@ export default function ClientsPage() {
 
   useEffect(() => { fetchClients(); }, []);
 
-  // --- TOGGLE PAYMENT STATUS ---
-  const togglePayment = async (e: React.MouseEvent, id: string, currentStatus: string) => {
-    e.stopPropagation(); // Prevents selecting the card when clicking status
-    const newStatus = currentStatus === "Paid" ? "Unpaid" : "Paid";
+  // --- SAVE CLIENT LOGIC ---
+  const handleSaveClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
     
+    try {
+      const { data, error } = await supabase
+        .from("clients")
+        .insert([formData])
+        .select();
+
+      if (error) throw error;
+
+      // Reset and Close
+      setFormData({
+        name: "", email: "", phone: "",
+        parent_name: "", last_service: "JAMB CBT Prep", payment_status: "Paid"
+      });
+      setIsModalOpen(false);
+      fetchClients(); // Refresh list
+      alert("Student added successfully!");
+    } catch (err: any) {
+      console.error("Save Error:", err.message);
+      alert("Error saving student: " + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const togglePayment = async (e: React.MouseEvent, id: string, currentStatus: string) => {
+    e.stopPropagation();
+    const newStatus = currentStatus === "Paid" ? "Unpaid" : "Paid";
     const { error } = await supabase
       .from("clients")
       .update({ payment_status: newStatus })
@@ -57,10 +83,8 @@ export default function ClientsPage() {
     }
   };
 
-  // --- FILTER LOGIC ---
   const filteredClients = clients.filter(c => {
-    const matchesSearch = c.name?.toLowerCase().includes(search.toLowerCase()) || 
-                          c.phone?.includes(search);
+    const matchesSearch = c.name?.toLowerCase().includes(search.toLowerCase()) || c.phone?.includes(search);
     const matchesService = serviceFilter === "All" || c.last_service === serviceFilter;
     const matchesPayment = paymentFilter === "All" || c.payment_status === paymentFilter;
     return matchesSearch && matchesService && matchesPayment;
@@ -75,9 +99,7 @@ export default function ClientsPage() {
   const handleBulkSMS = () => {
     const selectedClients = clients.filter(c => selectedIds.includes(c.id));
     const numbers = selectedClients.map(c => c.phone?.replace(/\D/g, '')).filter(n => n).join(',');
-    const message = paymentFilter === "Unpaid" 
-      ? `Hello ${targetType === 'parent' ? 'Parent' : 'Student'}, this is a friendly payment reminder from Opolo CBT Resort regarding ${serviceFilter === 'All' ? 'our services' : serviceFilter}.`
-      : `Hello ${targetType === 'parent' ? 'Parent' : 'Student'}, this is Opolo CBT Resort: `;
+    const message = `Hello, this is Opolo CBT Resort: `;
     window.location.href = `sms:${numbers}?body=${encodeURIComponent(message)}`;
   };
 
@@ -86,19 +108,19 @@ export default function ClientsPage() {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase italic">Client Database</h1>
-          <p className="text-slate-500 font-medium">Manage records, payments, and announcements.</p>
+          <p className="text-slate-500 font-medium">Manage records and payments.</p>
         </div>
         <button onClick={() => setIsModalOpen(true)} className="flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-4 rounded-2xl font-bold shadow-xl hover:bg-blue-700 transition-all">
           <UserPlus size={20} /> Add New Client
         </button>
       </header>
 
-      {/* MULTI-FILTER BAR */}
+      {/* SEARCH & FILTERS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="relative lg:col-span-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
           <input 
-            type="text" placeholder="Search..." 
+            type="text" placeholder="Search students..." 
             className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
             value={search} onChange={(e) => setSearch(e.target.value)}
           />
@@ -121,8 +143,9 @@ export default function ClientsPage() {
         </button>
       </div>
 
+      {/* CLIENT CARDS */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {filteredClients.map((client) => (
+        {loading ? <div className="p-10 text-center animate-pulse font-bold text-slate-400">Loading Clients...</div> : filteredClients.map((client) => (
           <div 
             key={client.id} onClick={() => setSelectedIds(prev => prev.includes(client.id) ? prev.filter(i => i !== client.id) : [...prev, client.id])}
             className={`bg-white p-6 rounded-3xl border cursor-pointer transition-all relative ${selectedIds.includes(client.id) ? 'border-blue-500 ring-4 ring-blue-50' : 'border-slate-200 shadow-sm'}`}
@@ -163,18 +186,54 @@ export default function ClientsPage() {
         ))}
       </div>
 
+      {/* --- ADD CLIENT MODAL --- */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden p-8 space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-black italic uppercase tracking-tighter">Register Student</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={24} /></button>
+            </div>
+
+            <form onSubmit={handleSaveClient} className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Full Name</p>
+                <input required type="text" className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Phone Number</p>
+                  <input required type="tel" className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Parent's Name</p>
+                  <input type="text" className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none" value={formData.parent_name} onChange={(e) => setFormData({...formData, parent_name: e.target.value})} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Initial Service</p>
+                <select className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none" value={formData.last_service} onChange={(e) => setFormData({...formData, last_service: e.target.value})}>
+                  <option value="JAMB CBT Prep">JAMB CBT Prep</option>
+                  <option value="JAMB Form Purchase">JAMB Form Purchase</option>
+                  <option value="WAEC Registration">WAEC Registration</option>
+                </select>
+              </div>
+              <button disabled={isSaving} className="w-full py-5 bg-slate-900 text-white font-black rounded-2xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2">
+                {isSaving ? <Loader2 className="animate-spin" /> : <><UserPlus size={20}/> Create Record</>}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* BULK SMS BAR */}
       {selectedIds.length > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-50">
           <div className="bg-slate-900 text-white p-5 rounded-[2.5rem] shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4 border border-slate-700">
             <div className="flex items-center gap-4">
               <div className="bg-blue-600 px-5 py-2 rounded-2xl font-black">{selectedIds.length} Selected</div>
-              <div className="flex bg-slate-800 p-1.5 rounded-2xl border border-slate-700">
-                <button onClick={() => setTargetType("student")} className={`px-4 py-2 text-xs font-bold rounded-xl ${targetType === 'student' ? 'bg-slate-600 text-white' : 'text-slate-500'}`}>Students</button>
-                <button onClick={() => setTargetType("parent")} className={`px-4 py-2 text-xs font-bold rounded-xl ${targetType === 'parent' ? 'bg-slate-600 text-white' : 'text-slate-500'}`}>Parents</button>
-              </div>
             </div>
-            <button onClick={handleBulkSMS} className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-2 shadow-lg shadow-emerald-900/20">
+            <button onClick={handleBulkSMS} className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-2 shadow-lg">
               <Send size={18} /> Send {paymentFilter === 'Unpaid' ? 'Reminders' : 'SMS'}
             </button>
           </div>
