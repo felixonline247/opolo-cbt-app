@@ -2,9 +2,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
-  UserPlus, Landmark, Banknote, CheckCircle2, 
-  Loader2, Wallet, Plus, X, Search, Receipt, 
-  FileText, Calendar, Printer, Filter, UserCheck
+  Plus, X, Loader2, Filter, Printer, 
+  UserCheck, Banknote, Calendar, ArrowRight, Package 
 } from "lucide-react";
 import ReceiptModal from "@/components/ReceiptModal";
 
@@ -42,17 +41,12 @@ export default function SalesPage() {
     // 1. Identify the logged-in staff member
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      // Priority: Display Name -> Full Name Metadata -> Email Prefix
       const name = user.user_metadata?.full_name || user.email?.split('@')[0];
       setCurrentStaff(name);
     }
 
     const { data: clientsData } = await supabase.from("clients").select("*").order("name");
-    
-    const { data: salesData } = await supabase
-      .from("sales")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data: salesData } = await supabase.from("sales").select("*").order("created_at", { ascending: false });
     
     if (clientsData) setClients(clientsData);
     if (salesData) setSales(salesData);
@@ -83,6 +77,25 @@ export default function SalesPage() {
     if (!clientName) return alert("Please select a student");
     setLoading(true);
 
+    // --- INVENTORY LOGIC ---
+    // If the service is JAMB CBT Prep, deduct a card/unit from inventory
+    if (service === "JAMB CBT Prep") {
+      const { data: invItem } = await supabase
+        .from("inventory")
+        .select("id, stock_quantity")
+        .eq("item_name", "JAMB Profile Code")
+        .single();
+
+      if (invItem) {
+        if (invItem.stock_quantity <= 0) {
+          setLoading(false);
+          return alert("🚫 STOP: Out of JAMB Profile Codes! Restock in Inventory first.");
+        }
+        // Deduct 1 unit
+        await supabase.from("inventory").update({ stock_quantity: invItem.stock_quantity - 1 }).eq("id", invItem.id);
+      }
+    }
+
     const salePayload = {
       client_name: clientName,
       parent_name: parentName,
@@ -90,7 +103,7 @@ export default function SalesPage() {
       amount: parseFloat(amount),
       institution_cost: parseFloat(institutionCost || "0"),
       payment_method: paymentMethod,
-      staff_name: currentStaff, // <--- Automatically injected from current user
+      staff_name: currentStaff,
     };
 
     const { data, error } = await supabase.from("sales").insert([salePayload]).select();
@@ -107,7 +120,7 @@ export default function SalesPage() {
       fetchData();
       resetForm();
     } else {
-        alert("Error saving sale: " + error.message);
+      alert("Error saving sale: " + error.message);
     }
     setLoading(false);
   };
@@ -129,63 +142,39 @@ export default function SalesPage() {
       <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 print:hidden">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase italic">Sales Ledger</h1>
-          <p className="text-slate-500 font-medium italic">Active Staff: <span className="text-blue-600 font-bold">{currentStaff}</span></p>
+          <p className="text-slate-500 font-medium">Active Staff: <span className="text-blue-600 font-bold underline">{currentStaff}</span></p>
         </div>
         
         <div className="flex flex-wrap gap-3 w-full lg:w-auto">
-          <button 
-            onClick={() => window.print()}
-            className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 px-6 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all"
-          >
+          <button onClick={() => window.print()} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 px-6 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all">
             <Printer size={20} /> Print Report
           </button>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-4 rounded-2xl font-bold shadow-xl hover:bg-blue-700 transition-all active:scale-95 group"
-          >
+          <button onClick={() => setIsModalOpen(true)} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-4 rounded-2xl font-bold shadow-xl hover:bg-blue-700 transition-all active:scale-95">
             <Plus size={20} /> Record Sale
           </button>
         </div>
       </header>
 
-      {/* DATE RANGE PICKER BAR */}
+      {/* FILTERS */}
       <div className="bg-white p-4 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-4 print:hidden">
-        <div className="flex items-center gap-2 text-slate-400 px-2">
-            <Filter size={18} />
-            <span className="text-xs font-black uppercase tracking-widest">Filter Date</span>
+        <div className="flex items-center gap-2 text-slate-400 px-2 font-black uppercase text-[10px]">
+          <Filter size={18} /> Filter Period
         </div>
         <div className="grid grid-cols-2 gap-2 w-full md:w-auto">
-            <input 
-                type="date" 
-                className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-            />
-            <input 
-                type="date" 
-                className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-            />
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
-        {(startDate || endDate) && (
-            <button 
-                onClick={() => { setStartDate(""); setEndDate(""); }}
-                className="text-xs font-bold text-red-500 hover:underline"
-            >
-                Clear Filter
-            </button>
-        )}
+        {(startDate || endDate) && <button onClick={() => { setStartDate(""); setEndDate(""); }} className="text-xs font-bold text-red-500">Clear</button>}
       </div>
 
-      {/* STAT CARDS */}
+      {/* STATS SUMMARY */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
-            <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total Revenue</p>
+            <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total Collections</p>
             <p className="text-2xl font-black text-slate-900">₦{totalRevenue.toLocaleString()}</p>
           </div>
           <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
-            <p className="text-[10px] font-black uppercase text-orange-500 mb-1">Partner Share</p>
+            <p className="text-[10px] font-black uppercase text-orange-500 mb-1">Institution Share</p>
             <p className="text-2xl font-black text-orange-600">₦{totalPartnerCost.toLocaleString()}</p>
           </div>
           <div className="bg-slate-900 p-6 rounded-[2rem] shadow-xl">
@@ -194,40 +183,34 @@ export default function SalesPage() {
           </div>
       </div>
 
-      {/* TABLE */}
-      <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm print:border-none print:shadow-none">
+      {/* LEDGER TABLE */}
+      <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead className="bg-slate-50 text-[10px] uppercase font-black text-slate-400 print:bg-white print:border-b-2 print:border-slate-900">
+              <thead className="bg-slate-50 text-[10px] uppercase font-black text-slate-400">
                 <tr>
                   <th className="p-6">Date</th>
                   <th className="p-6">Student</th>
-                  <th className="p-6">Processed By</th>
-                  <th className="p-6">Total Paid</th>
-                  <th className="p-6 text-right">Net Profit</th>
+                  <th className="p-6">Staff</th>
+                  <th className="p-6">Amount</th>
+                  <th className="p-6 text-right">Profit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {fetching ? (
-                  <tr><td colSpan={5} className="p-10 text-center animate-pulse">Loading...</td></tr>
-                ) : filteredSales.length === 0 ? (
-                  <tr><td colSpan={5} className="p-10 text-center font-bold text-slate-400">No transactions found for this period.</td></tr>
+                  <tr><td colSpan={5} className="p-10 text-center animate-pulse">Loading Sales...</td></tr>
                 ) : filteredSales.map((sale) => (
-                  <tr key={sale.id} className="hover:bg-slate-50/50">
+                  <tr key={sale.id} className="hover:bg-slate-50/50 group">
                     <td className="p-6 text-sm font-medium">{new Date(sale.created_at).toLocaleDateString()}</td>
                     <td className="p-6">
                         <p className="font-bold text-slate-900">{sale.client_name}</p>
                         <p className="text-[10px] text-slate-400 font-bold uppercase">{sale.service}</p>
                     </td>
                     <td className="p-6">
-                        <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-3 py-1 rounded-full uppercase">
-                            {sale.staff_name || "Admin"}
-                        </span>
+                        <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-3 py-1 rounded-full uppercase">{sale.staff_name || "Admin"}</span>
                     </td>
                     <td className="p-6 font-bold">₦{sale.amount.toLocaleString()}</td>
-                    <td className="p-6 text-right font-black text-emerald-600">
-                      ₦{(sale.amount - sale.institution_cost).toLocaleString()}
-                    </td>
+                    <td className="p-6 text-right font-black text-emerald-600">₦{(sale.amount - sale.institution_cost).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -235,7 +218,7 @@ export default function SalesPage() {
         </div>
       </div>
 
-      {/* MODAL */}
+      {/* RECORD SALE MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col md:flex-row relative">
@@ -256,24 +239,23 @@ export default function SalesPage() {
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Total Collected</p>
-                        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold text-blue-600" />
+                        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold text-blue-600 focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
                     <div className="space-y-1">
-                        <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Partner Split</p>
-                        <input type="number" value={institutionCost} onChange={(e) => setInstitutionCost(e.target.value)} className="w-full px-5 py-4 bg-orange-50 border rounded-2xl font-bold text-orange-600" />
+                        <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Institution Split</p>
+                        <input type="number" value={institutionCost} onChange={(e) => setInstitutionCost(e.target.value)} className="w-full px-5 py-4 bg-orange-50 border rounded-2xl font-bold text-orange-600 focus:ring-2 focus:ring-orange-500 outline-none" />
                     </div>
                 </div>
               </div>
               <button onClick={handleSaveSale} disabled={loading} className="w-full py-5 bg-slate-900 text-white font-black rounded-2xl hover:bg-blue-600 flex items-center justify-center gap-2 transition-all shadow-xl shadow-slate-200">
-                {loading ? <Loader2 className="animate-spin" /> : "Complete & Issue Receipt"}
+                {loading ? <Loader2 className="animate-spin" /> : <><Banknote size={20}/> Complete & Issue Receipt</>}
               </button>
             </div>
-            <div className="bg-slate-900 p-10 text-white w-full md:w-80 flex flex-col justify-center border-l border-slate-800">
+            <div className="bg-slate-900 p-10 text-white w-full md:w-80 flex flex-col justify-center border-l border-slate-800 relative overflow-hidden">
+                <Package className="absolute -bottom-10 -right-10 text-white opacity-5 w-40 h-40" />
                 <p className="text-[10px] uppercase font-black text-blue-500 mb-2">Net Profit Preview</p>
                 <h3 className="text-4xl font-black text-emerald-400 mb-6 tracking-tighter">₦{(Number(amount) - Number(institutionCost)).toLocaleString()}</h3>
-                <div className="space-y-4 text-slate-400">
-                    <p className="text-xs font-medium italic">All transactions are logged to your staff profile for end-of-day reconciliation.</p>
-                </div>
+                <p className="text-xs font-medium text-slate-400 italic">This transaction will be logged to {currentStaff} and will deduct 1 unit from JAMB inventory if applicable.</p>
             </div>
           </div>
         </div>
