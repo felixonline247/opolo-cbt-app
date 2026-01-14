@@ -1,14 +1,16 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation"; // Added for the settings shortcut
 import { supabase } from "@/lib/supabase";
 import { 
-  Plus, X, Loader2, Filter, Printer, 
-  UserCheck, Banknote, Calendar, ArrowRight, Package,
+  Plus, X, Loader2, Printer, 
+  Banknote, Settings, Search,
   Smartphone, Landmark 
 } from "lucide-react";
 import ReceiptModal from "@/components/ReceiptModal";
 
 export default function SalesPage() {
+  const router = useRouter();
   // --- AUTH & USER STATE ---
   const [currentStaff, setCurrentStaff] = useState<string>("System");
 
@@ -22,7 +24,10 @@ export default function SalesPage() {
   // --- DATA STATES ---
   const [clients, setClients] = useState<any[]>([]);
   const [sales, setSales] = useState<any[]>([]);
-  const [servicePresets, setServicePresets] = useState<any[]>([]); // NEW: Holds your prices/splits
+  const [servicePresets, setServicePresets] = useState<any[]>([]);
+  
+  // --- SEARCH STATE ---
+  const [searchTerm, setSearchTerm] = useState("");
   
   // --- FORM STATES ---
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -41,7 +46,6 @@ export default function SalesPage() {
       setCurrentStaff(name);
     }
     
-    // Fetch Clients, Sales, and the new Service Presets
     const { data: clientsData } = await supabase.from("clients").select("id, name, phone, parent_name").order("name");
     const { data: salesData } = await supabase.from("sales").select("*").order("created_at", { ascending: false });
     const { data: presetsData } = await supabase.from("service_presets").select("*").order("service_name");
@@ -55,6 +59,12 @@ export default function SalesPage() {
 
   useEffect(() => { fetchData(); }, []);
 
+  // Filter clients based on Name or Phone search
+  const filteredClients = clients.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (c.phone && c.phone.includes(searchTerm))
+  );
+
   const handleClientChange = (clientId: string) => {
     const selected = clients.find(c => c.id === clientId);
     if (selected) {
@@ -64,7 +74,6 @@ export default function SalesPage() {
     }
   };
 
-  // NEW: Logic to auto-fill amount and split based on service selection
   const handleServiceChange = (serviceName: string) => {
     const preset = servicePresets.find(p => p.service_name === serviceName);
     if (preset) {
@@ -73,6 +82,8 @@ export default function SalesPage() {
       setInstitutionCost(preset.institution_split.toString());
     } else {
       setService(serviceName);
+      setAmount("0");
+      setInstitutionCost("0");
     }
   };
 
@@ -81,7 +92,6 @@ export default function SalesPage() {
     if (!service) return alert("Please select a service");
     setLoading(true);
 
-    // Stock check for JAMB codes
     if (service === "JAMB CBT Prep") {
       const { data: invItem } = await supabase.from("inventory").select("id, stock_quantity").eq("item_name", "JAMB Profile Code").single();
       if (invItem && invItem.stock_quantity <= 0) {
@@ -123,6 +133,7 @@ export default function SalesPage() {
     setAmount("0");
     setInstitutionCost("0");
     setPaymentMethod("Cash");
+    setSearchTerm("");
   };
 
   const totalRevenue = sales.reduce((sum, s) => sum + s.amount, 0);
@@ -137,9 +148,17 @@ export default function SalesPage() {
           <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase italic">Sales Ledger</h1>
           <p className="text-slate-500 font-medium italic">Opolo CBT Resort Management</p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold shadow-xl hover:bg-blue-700 transition-all active:scale-95">
-          <Plus size={20} /> Record Sale
-        </button>
+        <div className="flex gap-3 w-full lg:w-auto">
+          <button 
+            onClick={() => router.push('/dashboard/settings/services')}
+            className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-600 px-6 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all"
+          >
+            <Settings size={20} /> Services
+          </button>
+          <button onClick={() => setIsModalOpen(true)} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold shadow-xl hover:bg-blue-700 transition-all active:scale-95">
+            <Plus size={20} /> Record Sale
+          </button>
+        </div>
       </header>
 
       {/* STATS */}
@@ -167,22 +186,31 @@ export default function SalesPage() {
               <h2 className="text-3xl font-black italic uppercase tracking-tighter">New Transaction</h2>
               
               <div className="space-y-4">
-                {/* STUDENT SELECTION */}
+                {/* SEARCHABLE STUDENT SELECT */}
                 <div className="space-y-1">
-                    <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Select Student</p>
+                    <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Find Student (Name or Phone)</p>
+                    <div className="relative mb-2">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <input 
+                        type="text" 
+                        placeholder="Type to filter..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
                     <select 
                       value={selectedClientId}
                       onChange={(e) => handleClientChange(e.target.value)} 
                       className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
                     >
-                      <option value="">-- Choose Name & Phone --</option>
-                      {clients.map(c => (
+                      <option value="">-- {filteredClients.length} students found --</option>
+                      {filteredClients.map(c => (
                         <option key={c.id} value={c.id}>{c.name.toUpperCase()} — {c.phone || "No Phone"}</option>
                       ))}
                     </select>
                 </div>
 
-                {/* SERVICE SELECTION (AUTO-FILLS PRICE/SPLIT) */}
                 <div className="space-y-1">
                     <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Select Service</p>
                     <select 
@@ -190,7 +218,7 @@ export default function SalesPage() {
                       onChange={(e) => handleServiceChange(e.target.value)} 
                       className="w-full px-5 py-4 bg-blue-50/50 border border-blue-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-blue-900"
                     >
-                      <option value="">-- Select Service --</option>
+                      <option value="">-- Choose Preset --</option>
                       {servicePresets.map(p => (
                         <option key={p.id} value={p.service_name}>{p.service_name.toUpperCase()}</option>
                       ))}
@@ -208,7 +236,6 @@ export default function SalesPage() {
                   </div>
                 </div>
 
-                {/* PAYMENT METHOD */}
                 <div className="space-y-3">
                   <p className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Payment Channel</p>
                   <div className="grid grid-cols-3 gap-3">
