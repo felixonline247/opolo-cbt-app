@@ -4,9 +4,10 @@ import { Printer, X, Download, Share2 } from "lucide-react";
 interface ReceiptProps {
   saleData: {
     id: string;
-    clientName: string;
+    clientName?: string; // Standard camelCase
+    client_name?: string; // Database style underscore
     service: string;
-    amount: string;
+    amount: string | number;
     date: string;
     staff: string;
     paymentMethod: string;
@@ -18,6 +19,10 @@ export default function ReceiptModal({ saleData, onClose }: ReceiptProps) {
   const handlePrint = () => {
     window.print(); // Triggers the browser print dialog
   };
+
+  // Logic to ensure we get the client name regardless of variable naming style
+  const displayName = saleData.clientName || saleData.client_name || "Valued Client";
+  const displayAmount = Number(saleData.amount) || 0;
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -34,15 +39,15 @@ export default function ReceiptModal({ saleData, onClose }: ReceiptProps) {
         {/* --- PRINTABLE AREA START --- */}
         <div id="receipt-content" className="p-8 font-mono text-sm text-slate-800 print:p-0">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-black tracking-tighter text-blue-600">OPOLO CBT RESORT</h2>
+            <h2 className="text-2xl font-black tracking-tighter text-blue-600 uppercase">OPOLO CBT RESORT</h2>
             <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Education Consulting Firm</p>
-            <p className="text-[10px] text-slate-400">Lagos, Nigeria | +234 000 000 0000</p>
+            <p className="text-[10px] text-slate-400 font-sans">Lagos, Nigeria | +234 000 000 0000</p>
           </div>
 
           <div className="border-y border-dashed border-slate-200 py-4 my-4 space-y-2">
             <div className="flex justify-between">
               <span>Receipt No:</span>
-              <span className="font-bold">#OCT-{saleData.id.slice(0, 8).toUpperCase()}</span>
+              <span className="font-bold">#OCT-{saleData.id?.slice(0, 8).toUpperCase() || 'TEMP'}</span>
             </div>
             <div className="flex justify-between">
               <span>Date:</span>
@@ -50,27 +55,29 @@ export default function ReceiptModal({ saleData, onClose }: ReceiptProps) {
             </div>
             <div className="flex justify-between">
               <span>Staff:</span>
-              <span>{saleData.staff}</span>
+              <span>{saleData.staff || 'Admin'}</span>
             </div>
           </div>
 
           <div className="space-y-4 mb-6">
             <div className="flex justify-between items-start">
-              <div className="max-w-[150px]">
-                <p className="font-bold">{saleData.service}</p>
-                <p className="text-[10px] text-slate-500 uppercase">Client: {saleData.clientName}</p>
+              <div className="max-w-[200px]">
+                <p className="font-bold uppercase">{saleData.service}</p>
+                <p className="text-[11px] text-blue-600 font-black mt-1 uppercase italic">
+                  Client: {displayName}
+                </p>
               </div>
-              <span className="font-bold">₦{Number(saleData.amount).toLocaleString()}</span>
+              <span className="font-bold">₦{displayAmount.toLocaleString()}</span>
             </div>
           </div>
 
           <div className="border-t-2 border-slate-900 pt-4 flex justify-between items-center">
             <span className="font-black text-lg">TOTAL PAID</span>
-            <span className="font-black text-xl text-blue-600">₦{Number(saleData.amount).toLocaleString()}</span>
+            <span className="font-black text-xl text-blue-600">₦{displayAmount.toLocaleString()}</span>
           </div>
 
           <div className="mt-8 text-center text-[10px] text-slate-400 uppercase tracking-widest leading-relaxed">
-            Payment Method: {saleData.paymentMethod} <br />
+            Payment Method: {saleData.paymentMethod || 'Cash'} <br />
             Thank you for choosing Opolo CBT! <br />
             *** No Refund After Service ***
           </div>
@@ -81,12 +88,12 @@ export default function ReceiptModal({ saleData, onClose }: ReceiptProps) {
         <div className="p-6 bg-slate-50 flex gap-3 print:hidden">
           <button 
             onClick={handlePrint}
-            className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition"
+            className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition shadow-lg shadow-blue-200"
           >
             <Printer size={18} /> Print Receipt
           </button>
-          <button className="p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-100 transition">
-            <Share2 size={18} />
+          <button onClick={onClose} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-100 transition">
+            Close
           </button>
         </div>
       </div>
@@ -96,10 +103,11 @@ export default function ReceiptModal({ saleData, onClose }: ReceiptProps) {
           body * { visibility: hidden; }
           #receipt-content, #receipt-content * { visibility: visible; }
           #receipt-content { 
-            position: absolute; 
+            position: absoluteg; 
             left: 0; 
             top: 0; 
             width: 100%;
+            padding: 20px;
           }
         }
       `}</style>
