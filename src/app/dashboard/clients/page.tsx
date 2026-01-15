@@ -2,8 +2,7 @@
 import { useState, useEffect } from "react";
 import { 
   Search, UserPlus, X, Loader2, Trash2, 
-  MessageSquare, History, UserCircle2, CheckSquare, 
-  Filter, Send, CheckCircle2, MinusCircle, AlertCircle, CreditCard
+  Send, CheckCircle2, CheckSquare
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -14,6 +13,9 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Admin toggle - In a real app, this would come from your Auth session/profile
+  const [isAdmin, setIsAdmin] = useState(true); 
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [serviceFilter, setServiceFilter] = useState("All");
@@ -25,7 +27,7 @@ export default function ClientsPage() {
     phone: "",
     parent_name: "",
     last_service: "",
-    payment_status: "Unpaid" // Default to Unpaid for better debt tracking
+    payment_status: "Unpaid" // Forced default
   });
 
   const fetchClients = async () => {
@@ -57,14 +59,32 @@ export default function ClientsPage() {
     setIsSaving(true);
     
     try {
-      const { data, error } = await supabase
+      // 1. DUPLICATE CHECK: Check if phone number already exists
+      const { data: existingClient, error: checkError } = await supabase
         .from("clients")
-        .insert([formData])
-        .select();
+        .select("id, name")
+        .eq("phone", formData.phone)
+        .maybeSingle();
+
+      if (existingClient) {
+        alert(`DUPLICATE FOUND: ${existingClient.name} is already registered with this phone number. Please find them in the list to add a sales record.`);
+        setIsSaving(false);
+        return;
+      }
+
+      // 2. AUTO-TAG AS UNPAID: Override any attempt to change status during creation
+      const newClientData = {
+        ...formData,
+        payment_status: "Unpaid"
+      };
+
+      const { error } = await supabase
+        .from("clients")
+        .insert([newClientData]);
 
       if (error) throw error;
 
-      // Reset form while keeping the first service preset as default
+      // Reset and Refresh
       setFormData({
         name: "", email: "", phone: "",
         parent_name: "", 
@@ -73,11 +93,30 @@ export default function ClientsPage() {
       });
       setIsModalOpen(false);
       fetchClients();
-      alert("Student added successfully!");
+      alert("Student registered as UNPAID. Once you record their payment in Sales, they will be marked as Paid.");
     } catch (err: any) {
-      alert("Error saving student: " + err.message);
+      alert("Error: " + err.message);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeleteClient = async (e: React.MouseEvent, id: string, name: string) => {
+    e.stopPropagation();
+    if (!isAdmin) return;
+    
+    const confirmDelete = window.confirm(`Are you sure you want to delete ${name}? This action cannot be undone.`);
+    if (!confirmDelete) return;
+
+    const { error } = await supabase
+      .from("clients")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      alert("Error deleting: " + error.message);
+    } else {
+      setClients(clients.filter(c => c.id !== id));
     }
   };
 
@@ -159,16 +198,28 @@ export default function ClientsPage() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         {loading ? <div className="p-10 text-center animate-pulse font-bold text-slate-400">Loading Clients...</div> : filteredClients.map((client) => (
           <div 
-            key={client.id} onClick={() => setSelectedIds(prev => prev.includes(client.id) ? prev.filter(i => i !== client.id) : [...prev, client.id])}
-            className={`bg-white p-6 rounded-3xl border cursor-pointer transition-all relative ${selectedIds.includes(client.id) ? 'border-blue-500 ring-4 ring-blue-50' : 'border-slate-200 shadow-sm'}`}
+            key={client.id} 
+            onClick={() => setSelectedIds(prev => prev.includes(client.id) ? prev.filter(i => i !== client.id) : [...prev, client.id])}
+            className={`bg-white p-6 rounded-3xl border cursor-pointer transition-all relative group ${selectedIds.includes(client.id) ? 'border-blue-500 ring-4 ring-blue-50' : 'border-slate-200 shadow-sm'}`}
           >
+            {/* DELETE BUTTON (ADMIN ONLY) */}
+            {isAdmin && (
+                <button 
+                  onClick={(e) => handleDeleteClient(e, client.id, client.name)}
+                  className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all"
+                  title="Delete Client"
+                >
+                    <Trash2 size={18} />
+                </button>
+            )}
+
             <div className={`absolute top-6 left-6 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${selectedIds.includes(client.id) ? 'bg-blue-600 border-blue-600' : 'bg-slate-50 border-slate-200'}`}>
               {selectedIds.includes(client.id) && <CheckSquare size={14} className="text-white" />}
             </div>
 
             <div className="ml-10 flex justify-between items-start">
               <div className="flex items-center gap-4">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl ${selectedIds.includes(client.id) ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{client.name?.charAt(0)}</div>
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl ${client.payment_status === 'Paid' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{client.name?.charAt(0)}</div>
                 <div>
                   <h3 className="font-bold text-slate-900 text-lg">{client.name}</h3>
                   <div className="flex items-center gap-2">
@@ -224,32 +275,21 @@ export default function ClientsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                    <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Initial Service</p>
-                    <select 
-                    className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none" 
-                    value={formData.last_service} 
-                    onChange={(e) => setFormData({...formData, last_service: e.target.value})}
-                    >
-                    {servicePresets.map(p => (
-                        <option key={p.id} value={p.service_name}>{p.service_name}</option>
-                    ))}
-                    </select>
-                </div>
+              <div className="space-y-1">
+                <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Initial Service</p>
+                <select 
+                  className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none" 
+                  value={formData.last_service} 
+                  onChange={(e) => setFormData({...formData, last_service: e.target.value})}
+                >
+                  {servicePresets.map(p => (
+                    <option key={p.id} value={p.service_name}>{p.service_name}</option>
+                  ))}
+                </select>
+              </div>
 
-                {/* NEW PAYMENT STATUS DROPDOWN */}
-                <div className="space-y-1">
-                    <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Initial Payment</p>
-                    <select 
-                    className={`w-full px-5 py-4 border rounded-2xl font-bold outline-none transition-colors ${formData.payment_status === 'Paid' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-red-50 border-red-100 text-red-600'}`}
-                    value={formData.payment_status} 
-                    onChange={(e) => setFormData({...formData, payment_status: e.target.value})}
-                    >
-                        <option value="Unpaid">UNPAID (DEBT)</option>
-                        <option value="Paid">PAID FULL</option>
-                    </select>
-                </div>
+              <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                <p className="text-xs text-amber-700 font-medium">New students are automatically marked as <strong>Unpaid</strong>. Record a sale to mark them as Paid.</p>
               </div>
 
               <button disabled={isSaving} className="w-full py-5 bg-slate-900 text-white font-black rounded-2xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2">
