@@ -7,7 +7,8 @@ import {
   Wallet, 
   Settings, 
   LogOut, 
-  ShieldCheck 
+  ShieldCheck,
+  UserPlus // Added for the New Staff button
 } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -23,16 +24,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
-          <NavItem icon={<LayoutDashboard size={20}/>} label="Overview" href="/dashboard" active />
+          <NavItem icon={<LayoutDashboard size={20}/>} label="Overview" href="/dashboard" />
           <NavItem icon={<Users size={20}/>} label="Clients/Students" href="/dashboard/clients" />
+          {/* New: Link to the Staff Management page */}
+          <NavItem icon={<ShieldCheck size={20}/>} label="Staff Management" href="/dashboard/staff" />
           <NavItem icon={<Receipt size={20}/>} label="Daily Sales" href="/dashboard/sales" />
           <NavItem icon={<Wallet size={20}/>} label="Staff Payroll" href="/dashboard/payroll" />
+          
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">System</div>
-          <NavItem icon={<ShieldCheck size={20}/>} label="Permissions" href="/dashboard/permissions" />
           <NavItem icon={<Settings size={20}/>} label="Settings" href="/dashboard/settings" />
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
+        {/* --- ACTION BUTTON AREA --- */}
+        <div className="p-4 space-y-2 border-t border-slate-100">
+          {/* THE NEW STAFF QUICK-ACTION BUTTON */}
+          <Link 
+            href="/dashboard/staff?action=new"
+            className="flex items-center justify-center gap-2 w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-tighter hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
+          >
+            <UserPlus size={18} />
+            <span>New Staff</span>
+          </Link>
+
           <button className="flex items-center w-full px-4 py-3 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition font-medium">
             <LogOut size={20} className="mr-3" /> Logout
           </button>
@@ -43,7 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
-          <h2 className="font-bold text-slate-800">Dashboard Overview</h2>
+          <h2 className="font-bold text-slate-800 tracking-tight italic uppercase text-sm">Opolo Management System</h2>
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="text-sm font-bold text-slate-900 leading-none">Admin User</p>
@@ -64,17 +77,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   );
 }
 
-function NavItem({ icon, label, href, active = false }: any) {
+function NavItem({ icon, label, href }: any) {
+  // Note: For 'active' state logic, you can use usePathname() from next/navigation
   return (
     <Link 
       href={href} 
-      className={`flex items-center px-4 py-3 rounded-xl font-semibold transition ${
-        active 
-        ? "bg-blue-600 text-white shadow-lg shadow-blue-200" 
-        : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-      }`}
+      className="flex items-center px-4 py-3 rounded-xl font-semibold transition text-slate-500 hover:bg-slate-50 hover:text-blue-600 group"
     >
-      <span className="mr-3">{icon}</span>
+      <span className="mr-3 text-slate-400 group-hover:text-blue-600 transition-colors">{icon}</span>
       {label}
     </Link>
   );

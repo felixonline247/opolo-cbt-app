@@ -1,16 +1,16 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation"; // Added for the settings shortcut
+import { useRouter } from "next/navigation"; 
 import { supabase } from "@/lib/supabase";
 import { 
-  Plus, X, Loader2, Printer, 
-  Banknote, Settings, Search,
-  Smartphone, Landmark 
+  Plus, X, Loader2, Search,
+  Banknote, Settings, Smartphone, Landmark 
 } from "lucide-react";
 import ReceiptModal from "@/components/ReceiptModal";
 
 export default function SalesPage() {
   const router = useRouter();
+  
   // --- AUTH & USER STATE ---
   const [currentStaff, setCurrentStaff] = useState<string>("System");
 
@@ -59,7 +59,6 @@ export default function SalesPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Filter clients based on Name or Phone search
   const filteredClients = clients.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (c.phone && c.phone.includes(searchTerm))
@@ -92,6 +91,7 @@ export default function SalesPage() {
     if (!service) return alert("Please select a service");
     setLoading(true);
 
+    // Inventory Check for JAMB
     if (service === "JAMB CBT Prep") {
       const { data: invItem } = await supabase.from("inventory").select("id, stock_quantity").eq("item_name", "JAMB Profile Code").single();
       if (invItem && invItem.stock_quantity <= 0) {
@@ -114,6 +114,7 @@ export default function SalesPage() {
     const { data, error } = await supabase.from("sales").insert([salePayload]).select();
 
     if (!error) {
+      // Mark client as PAID automatically
       await supabase.from("clients").update({ payment_status: "Paid", last_service: service }).eq("id", selectedClientId);
       setActiveReceipt({ ...salePayload, id: data[0].id });
       setShowReceipt(true);
@@ -149,10 +150,7 @@ export default function SalesPage() {
           <p className="text-slate-500 font-medium italic">Opolo CBT Resort Management</p>
         </div>
         <div className="flex gap-3 w-full lg:w-auto">
-          <button 
-            onClick={() => router.push('/dashboard/settings/services')}
-            className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-600 px-6 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all"
-          >
+          <button onClick={() => router.push('/dashboard/settings/services')} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-600 px-6 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all">
             <Settings size={20} /> Services
           </button>
           <button onClick={() => setIsModalOpen(true)} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold shadow-xl hover:bg-blue-700 transition-all active:scale-95">
@@ -186,7 +184,6 @@ export default function SalesPage() {
               <h2 className="text-3xl font-black italic uppercase tracking-tighter">New Transaction</h2>
               
               <div className="space-y-4">
-                {/* SEARCHABLE STUDENT SELECT */}
                 <div className="space-y-1">
                     <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Find Student (Name or Phone)</p>
                     <div className="relative mb-2">
@@ -269,28 +266,32 @@ export default function SalesPage() {
       )}
 
       {/* TABLE */}
-      <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
-        <table className="w-full text-left">
+      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-x-auto">
+        <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50 text-[10px] uppercase font-black text-slate-400">
             <tr>
               <th className="p-6">Date</th>
-              <th className="p-6">Student</th>
+              <th className="p-6">Student & Service</th>
               <th className="p-6">Method</th>
-              <th className="p-6 text-right">Profit</th>
+              <th className="p-6 text-right">Amount Paid</th>
+              <th className="p-6 text-right">Inst. Split</th>
+              <th className="p-6 text-right">Net Profit</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
             {sales.map((sale) => (
               <tr key={sale.id} className="hover:bg-slate-50/50">
-                <td className="p-6 text-xs text-slate-400">{new Date(sale.created_at).toLocaleDateString()}</td>
+                <td className="p-6 text-xs text-slate-400 whitespace-nowrap">{new Date(sale.created_at).toLocaleDateString()}</td>
                 <td className="p-6">
                     <p className="font-bold text-slate-900 uppercase">{sale.client_name}</p>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase">{sale.service}</p>
+                    <p className="text-[9px] text-blue-600 font-bold uppercase">{sale.service}</p>
                 </td>
                 <td className="p-6">
                     <span className="text-[9px] font-black px-2 py-1 bg-slate-100 rounded uppercase">{sale.payment_method}</span>
                 </td>
-                <td className="p-6 text-right font-black text-emerald-600">₦{(sale.amount - sale.institution_cost).toLocaleString()}</td>
+                <td className="p-6 text-right font-bold text-slate-900">₦{sale.amount.toLocaleString()}</td>
+                <td className="p-6 text-right font-bold text-orange-500">₦{sale.institution_cost.toLocaleString()}</td>
+                <td className="p-6 text-right font-black text-emerald-600 bg-emerald-50/30">₦{(sale.amount - sale.institution_cost).toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
