@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { supabase } from "@/lib/supabase"; // You'll create this helper file next
+// 1. Swap the old client for the SSR-compatible browser client
+import { createBrowserClient } from "@supabase/ssr"; 
 import { useRouter } from "next/navigation";
 import { Lock, Mail, Loader2 } from "lucide-react";
 
@@ -10,6 +11,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  // 2. Initialize the SSR Browser Client
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +32,10 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard"); // Successful login
+      // 3. Use router.refresh() before push to ensure the 
+      // middleware recognizes the newly set cookies
+      router.refresh(); 
+      router.push("/dashboard");
     }
   };
 
@@ -36,25 +46,25 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 text-white rounded-2xl mb-4 shadow-lg shadow-blue-200">
             <Lock className="w-8 h-8" />
           </div>
-          <h2 className="text-3xl font-extrabold text-slate-900">Staff Access</h2>
-          <p className="text-slate-500 mt-2">Opolo CBT Resort Management System</p>
+          <h2 className="text-3xl font-extrabold text-slate-900 leading-tight">Staff Access</h2>
+          <p className="text-slate-500 mt-2 font-medium">Opolo CBT Resort Management System</p>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm">
+          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm font-bold">
             {error}
           </div>
         )}
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Email Address</label>
+            <label className="block text-sm font-black text-slate-700 uppercase tracking-wider mb-2">Email Address</label>
             <div className="relative">
-              <Mail className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
+              <Mail className="absolute left-4 top-4 w-5 h-5 text-slate-400" />
               <input
                 type="email"
                 required
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium text-slate-900"
                 placeholder="staff@opolocbt.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -63,13 +73,13 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Password</label>
+            <label className="block text-sm font-black text-slate-700 uppercase tracking-wider mb-2">Password</label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
+              <Lock className="absolute left-4 top-4 w-5 h-5 text-slate-400" />
               <input
                 type="password"
                 required
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium text-slate-900"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -80,9 +90,9 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition flex items-center justify-center shadow-lg shadow-blue-200 active:scale-95"
+            className="w-full py-5 bg-slate-900 text-white font-black uppercase italic tracking-widest rounded-2xl hover:bg-blue-600 transition-all flex items-center justify-center shadow-2xl active:scale-95 disabled:opacity-50"
           >
-            {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign In to Dashboard"}
+            {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Authorize Entry"}
           </button>
         </form>
       </div>
