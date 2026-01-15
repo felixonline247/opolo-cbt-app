@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { 
   Users, TrendingUp, CreditCard, Wallet, Landmark, 
   ArrowRight, Loader2, AlertCircle, BarChart3, UserCheck,
-  PieChart, Banknote, Smartphone
+  PieChart, Banknote, Smartphone, Briefcase // Added Briefcase for Staff
 } from "lucide-react";
 import Link from "next/link";
 
@@ -15,6 +15,7 @@ export default function AdminDashboardPage() {
     totalRevenue: 0,
     netProfit: 0,
     totalStudents: 0,
+    totalStaff: 0, // New Stat
     unpaidDebt: 0,
     paymentBreakdown: { Cash: 0, Transfer: 0, POS: 0 },
     recentSales: [] as any[],
@@ -28,23 +29,26 @@ export default function AdminDashboardPage() {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
 
+      // Fetch Sales and Clients
       const { data: sales } = await supabase.from("sales").select("*").order("created_at", { ascending: false });
       const { data: clients } = await supabase.from("clients").select("*");
+      
+      // Fetch Staff Count Logic
+      // Note: If you don't have a specific 'staff' table yet, we calculate 
+      // unique staff names from the sales table as a fallback.
+      const uniqueStaff = new Set(sales?.map(s => s.staff_name).filter(Boolean));
 
       if (sales && clients) {
-        // 1. Basic Stats
         const revenue = sales.reduce((sum, s) => sum + (s.amount || 0), 0);
         const costs = sales.reduce((sum, s) => sum + (s.institution_cost || 0), 0);
         const debtors = clients.filter(c => c.payment_status === "Unpaid").length;
 
-        // 2. Payment Method Breakdown Logic
         const breakdown = sales.reduce((acc: any, sale: any) => {
           const method = sale.payment_method || "Cash";
           acc[method] = (acc[method] || 0) + (sale.amount || 0);
           return acc;
         }, { Cash: 0, Transfer: 0, POS: 0 });
 
-        // 3. Monthly Growth Logic
         const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const last6 = Array.from({ length: 6 }, (_, i) => {
           const d = new Date();
@@ -66,6 +70,7 @@ export default function AdminDashboardPage() {
           totalRevenue: revenue,
           netProfit: revenue - costs,
           totalStudents: clients.length,
+          totalStaff: uniqueStaff.size || 0, // Updated with count
           unpaidDebt: debtors,
           paymentBreakdown: breakdown,
           recentSales: sales.slice(0, 5),
@@ -86,8 +91,8 @@ export default function AdminDashboardPage() {
     <div className="space-y-8 pb-10">
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase italic">Opolo CBT Resort</h1>
-          <p className="text-slate-500 font-medium">Welcome back, <span className="text-blue-600 font-bold">{user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Staff'}</span></p>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase italic leading-none">Opolo CBT Resort</h1>
+          <p className="text-slate-500 font-medium mt-2">Welcome back, <span className="text-blue-600 font-bold">{user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Staff'}</span></p>
         </div>
         <div className="bg-blue-50 px-4 py-2 rounded-2xl flex items-center gap-2 text-blue-700 font-bold text-sm border border-blue-100">
           <UserCheck size={16} /> Staff Account Active
@@ -98,13 +103,15 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="Total Collections" value={`₦${stats.totalRevenue.toLocaleString()}`} icon={<CreditCard size={24}/>} color="bg-blue-600" />
         <StatCard title="Net Profit" value={`₦${stats.netProfit.toLocaleString()}`} icon={<Wallet size={24}/>} color="bg-emerald-600" subtitle="After Splits" />
-        <StatCard title="Total Students" value={stats.totalStudents.toString()} icon={<Users size={24}/>} color="bg-slate-900" />
+        
+        {/* NEW TOTAL STAFF CARD */}
+        <StatCard title="Total Staff" value={stats.totalStaff.toString()} icon={<Briefcase size={24}/>} color="bg-orange-500" subtitle="Active Team" />
+        
         <StatCard title="Unpaid Students" value={stats.unpaidDebt.toString()} icon={<AlertCircle size={24}/>} color="bg-red-500" subtitle="Action Needed" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* --- PAYMENT BREAKDOWN (NEW) --- */}
+        {/* --- PAYMENT BREAKDOWN --- */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm h-fit">
           <h3 className="font-black uppercase tracking-widest text-[10px] text-slate-400 flex items-center gap-2 mb-8">
             <PieChart size={14} className="text-blue-500" /> Collection Channels

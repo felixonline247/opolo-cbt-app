@@ -1,17 +1,17 @@
 "use client";
-import { useState, useEffect, useRef, Suspense } from "react"; // Added useRef
-import { useSearchParams } from "next/navigation"; // Added hook
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation"; // Added useRouter
 import { supabase } from "@/lib/supabase";
 import { 
   UserPlus, UserX, Trash2, 
   Loader2, CheckCircle2, AlertCircle,
-  Mail, Lock, Phone, CreditCard
+  Mail, Lock, Phone, CreditCard, X // Added X for the cancel icon if needed
 } from "lucide-react";
 
-// Inner component to handle search params logic
 function StaffManagementContent() {
   const searchParams = useSearchParams();
-  const formRef = useRef<HTMLDivElement>(null); // Ref for scrolling/highlighting
+  const router = useRouter(); // Initialize router
+  const formRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [staffList, setStaffList] = useState<any[]>([]);
   
@@ -25,7 +25,6 @@ function StaffManagementContent() {
 
   const [message, setMessage] = useState({ text: "", type: "" });
 
-  // Check for ?action=new and trigger scroll/highlight
   useEffect(() => {
     const action = searchParams.get("action");
     if (action === "new" && formRef.current) {
@@ -103,7 +102,6 @@ function StaffManagementContent() {
       </header>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        {/* ADD STAFF FORM WITH HIGHLIGHT LOGIC */}
         <div 
           ref={formRef}
           className={`bg-white p-8 rounded-[2.5rem] border transition-all duration-500 h-fit ${
@@ -117,6 +115,7 @@ function StaffManagementContent() {
             Create Account
           </h2>
           <form onSubmit={handleCreateStaff} className="space-y-4">
+            {/* ... form fields remain the same ... */}
             <div className="space-y-1">
               <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Full Name</p>
               <input required type="text" placeholder="John Doe" className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" 
@@ -165,9 +164,26 @@ function StaffManagementContent() {
               </div>
             </div>
 
-            <button disabled={loading} className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-blue-600 transition-all shadow-lg active:scale-95">
-              {loading ? <Loader2 className="animate-spin mx-auto" /> : "Register Staff"}
-            </button>
+            {/* UPDATED BUTTON GROUP */}
+            <div className="flex gap-3 pt-2">
+              <button 
+                type="submit"
+                disabled={loading} 
+                className="flex-[2] py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-blue-600 transition-all shadow-lg active:scale-95 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="animate-spin mx-auto" size={20} /> : "Register Staff"}
+              </button>
+
+              {isHighlighted && (
+                <button 
+                  type="button"
+                  onClick={() => router.push('/dashboard/staff')}
+                  className="flex-1 py-4 bg-slate-100 text-slate-500 font-bold rounded-2xl hover:bg-slate-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
 
             {message.text && (
               <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
@@ -178,7 +194,7 @@ function StaffManagementContent() {
           </form>
         </div>
 
-        {/* STAFF LIST */}
+        {/* ... staff list table remains the same ... */}
         <div className="xl:col-span-2 bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
           <table className="w-full text-left">
             <thead className="bg-slate-50 text-[10px] uppercase font-black text-slate-400">
@@ -214,7 +230,6 @@ function StaffManagementContent() {
   );
 }
 
-// Main component wrapped in Suspense (Required for useSearchParams)
 export default function StaffManagement() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-blue-600" /></div>}>
