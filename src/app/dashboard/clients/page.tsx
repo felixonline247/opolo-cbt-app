@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase";
 export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [clients, setClients] = useState<any[]>([]);
-  const [servicePresets, setServicePresets] = useState<any[]>([]); // NEW: State for presets
+  const [servicePresets, setServicePresets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -24,19 +24,17 @@ export default function ClientsPage() {
     email: "",
     phone: "",
     parent_name: "",
-    last_service: "", // Changed to empty so it pulls first preset later
-    payment_status: "Paid"
+    last_service: "",
+    payment_status: "Unpaid" // Default to Unpaid for better debt tracking
   });
 
   const fetchClients = async () => {
     setLoading(true);
-    // Fetch Students
     const { data: clientsData } = await supabase
       .from("clients")
       .select("*")
       .order("created_at", { ascending: false });
 
-    // Fetch Service Presets (Dynamic Menu)
     const { data: presetsData } = await supabase
       .from("service_presets")
       .select("*")
@@ -45,7 +43,6 @@ export default function ClientsPage() {
     if (clientsData) setClients(clientsData);
     if (presetsData) {
         setServicePresets(presetsData);
-        // Set default service in form to the first preset found
         if (presetsData.length > 0 && !formData.last_service) {
             setFormData(prev => ({ ...prev, last_service: presetsData[0].service_name }));
         }
@@ -67,11 +64,12 @@ export default function ClientsPage() {
 
       if (error) throw error;
 
+      // Reset form while keeping the first service preset as default
       setFormData({
         name: "", email: "", phone: "",
         parent_name: "", 
         last_service: servicePresets[0]?.service_name || "", 
-        payment_status: "Paid"
+        payment_status: "Unpaid" 
       });
       setIsModalOpen(false);
       fetchClients();
@@ -139,7 +137,6 @@ export default function ClientsPage() {
           />
         </div>
         
-        {/* Dynamic Service Filter */}
         <select className="bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold text-slate-700 outline-none shadow-sm" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
           <option value="All">All Services</option>
           {servicePresets.map(p => (
@@ -215,6 +212,7 @@ export default function ClientsPage() {
                 <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Full Name</p>
                 <input required type="text" className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
               </div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Phone Number</p>
@@ -225,20 +223,35 @@ export default function ClientsPage() {
                   <input type="text" className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none" value={formData.parent_name} onChange={(e) => setFormData({...formData, parent_name: e.target.value})} />
                 </div>
               </div>
-              <div className="space-y-1">
-                <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Initial Service</p>
-                {/* DYNAMIC SELECT MENU */}
-                <select 
-                  className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none" 
-                  value={formData.last_service} 
-                  onChange={(e) => setFormData({...formData, last_service: e.target.value})}
-                >
-                  {servicePresets.length === 0 && <option>Loading services...</option>}
-                  {servicePresets.map(p => (
-                    <option key={p.id} value={p.service_name}>{p.service_name}</option>
-                  ))}
-                </select>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                    <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Initial Service</p>
+                    <select 
+                    className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none" 
+                    value={formData.last_service} 
+                    onChange={(e) => setFormData({...formData, last_service: e.target.value})}
+                    >
+                    {servicePresets.map(p => (
+                        <option key={p.id} value={p.service_name}>{p.service_name}</option>
+                    ))}
+                    </select>
+                </div>
+
+                {/* NEW PAYMENT STATUS DROPDOWN */}
+                <div className="space-y-1">
+                    <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Initial Payment</p>
+                    <select 
+                    className={`w-full px-5 py-4 border rounded-2xl font-bold outline-none transition-colors ${formData.payment_status === 'Paid' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-red-50 border-red-100 text-red-600'}`}
+                    value={formData.payment_status} 
+                    onChange={(e) => setFormData({...formData, payment_status: e.target.value})}
+                    >
+                        <option value="Unpaid">UNPAID (DEBT)</option>
+                        <option value="Paid">PAID FULL</option>
+                    </select>
+                </div>
               </div>
+
               <button disabled={isSaving} className="w-full py-5 bg-slate-900 text-white font-black rounded-2xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2">
                 {isSaving ? <Loader2 className="animate-spin" /> : <><UserPlus size={20}/> Create Record</>}
               </button>
