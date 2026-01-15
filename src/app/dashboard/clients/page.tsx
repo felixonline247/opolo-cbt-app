@@ -10,12 +10,12 @@ import { supabase } from "@/lib/supabase";
 export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [clients, setClients] = useState<any[]>([]);
+  const [servicePresets, setServicePresets] = useState<any[]>([]); // NEW: State for presets
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [targetType, setTargetType] = useState<"parent" | "student">("student");
   const [serviceFilter, setServiceFilter] = useState("All");
   const [paymentFilter, setPaymentFilter] = useState("All");
 
@@ -24,24 +24,37 @@ export default function ClientsPage() {
     email: "",
     phone: "",
     parent_name: "",
-    last_service: "JAMB CBT Prep",
+    last_service: "", // Changed to empty so it pulls first preset later
     payment_status: "Paid"
   });
 
   const fetchClients = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    // Fetch Students
+    const { data: clientsData } = await supabase
       .from("clients")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!error) setClients(data || []);
+    // Fetch Service Presets (Dynamic Menu)
+    const { data: presetsData } = await supabase
+      .from("service_presets")
+      .select("*")
+      .order("service_name");
+
+    if (clientsData) setClients(clientsData);
+    if (presetsData) {
+        setServicePresets(presetsData);
+        // Set default service in form to the first preset found
+        if (presetsData.length > 0 && !formData.last_service) {
+            setFormData(prev => ({ ...prev, last_service: presetsData[0].service_name }));
+        }
+    }
     setLoading(false);
   };
 
   useEffect(() => { fetchClients(); }, []);
 
-  // --- SAVE CLIENT LOGIC ---
   const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -54,16 +67,16 @@ export default function ClientsPage() {
 
       if (error) throw error;
 
-      // Reset and Close
       setFormData({
         name: "", email: "", phone: "",
-        parent_name: "", last_service: "JAMB CBT Prep", payment_status: "Paid"
+        parent_name: "", 
+        last_service: servicePresets[0]?.service_name || "", 
+        payment_status: "Paid"
       });
       setIsModalOpen(false);
-      fetchClients(); // Refresh list
+      fetchClients();
       alert("Student added successfully!");
     } catch (err: any) {
-      console.error("Save Error:", err.message);
       alert("Error saving student: " + err.message);
     } finally {
       setIsSaving(false);
@@ -126,10 +139,12 @@ export default function ClientsPage() {
           />
         </div>
         
+        {/* Dynamic Service Filter */}
         <select className="bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold text-slate-700 outline-none shadow-sm" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
           <option value="All">All Services</option>
-          <option value="JAMB CBT Prep">JAMB CBT Prep</option>
-          <option value="JAMB Form Purchase">JAMB Form Purchase</option>
+          {servicePresets.map(p => (
+            <option key={p.id} value={p.service_name}>{p.service_name}</option>
+          ))}
         </select>
 
         <select className="bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold text-slate-700 outline-none shadow-sm" value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)}>
@@ -212,10 +227,16 @@ export default function ClientsPage() {
               </div>
               <div className="space-y-1">
                 <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Initial Service</p>
-                <select className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none" value={formData.last_service} onChange={(e) => setFormData({...formData, last_service: e.target.value})}>
-                  <option value="JAMB CBT Prep">JAMB CBT Prep</option>
-                  <option value="JAMB Form Purchase">JAMB Form Purchase</option>
-                  <option value="WAEC Registration">WAEC Registration</option>
+                {/* DYNAMIC SELECT MENU */}
+                <select 
+                  className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none" 
+                  value={formData.last_service} 
+                  onChange={(e) => setFormData({...formData, last_service: e.target.value})}
+                >
+                  {servicePresets.length === 0 && <option>Loading services...</option>}
+                  {servicePresets.map(p => (
+                    <option key={p.id} value={p.service_name}>{p.service_name}</option>
+                  ))}
                 </select>
               </div>
               <button disabled={isSaving} className="w-full py-5 bg-slate-900 text-white font-black rounded-2xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2">
