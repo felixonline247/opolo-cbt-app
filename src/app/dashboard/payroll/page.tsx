@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { usePermissions } from "@/hooks/usePermissions"; // Import the hook
+import ProtectedRoute from "@/components/ProtectedRoute"; // Import the wrapper
 import { 
   Wallet, Clock, CheckCircle, Search, 
   Loader2, Plus, History, X, CalendarDays, Printer,
@@ -8,35 +10,26 @@ import {
   UserPlus, Settings
 } from "lucide-react";
 
-export default function UnifiedPayrollPage() {
+function PayrollContent() {
+  const { hasPermission } = usePermissions(); // Initialize permission check
   const [loading, setLoading] = useState(true);
   const [staff, setStaff] = useState<any[]>([]);
   const [payouts, setPayouts] = useState<any[]>([]);
   const [globalCommissionRate, setGlobalCommissionRate] = useState(0);
-  
-  // --- DATE FILTER STATE ---
   const [selectedDate, setSelectedDate] = useState(new Date());
-
-  // Modal States
   const [historyStaff, setHistoryStaff] = useState<any>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
-    
-    // 1. Fetch Global Commission Rate from Settings
     const { data: settings } = await supabase.from('settings').select('commission_rate').single();
     const globalRate = settings?.commission_rate || 0;
     setGlobalCommissionRate(globalRate);
 
-    // 2. Define Date Range for the Selected Month
     const startOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1).toISOString();
     const endOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
-    // 3. Fetch Staff, Payouts, and Sales
-    const { data: staffData } = await supabase.from("staff").select("*").order('name');
+    const { data: staffData } = await supabase.from("staff").select("*, roles(name)").order('name');
     const { data: payoutData } = await supabase.from("payouts").select("*").order('created_at', { ascending: false });
-    
     const { data: salesData } = await supabase
       .from("sales")
       .select("staff_name, amount, created_at")
@@ -48,22 +41,18 @@ export default function UnifiedPayrollPage() {
         const staffSales = salesData?.filter(s => s.staff_name === member.name) || [];
         const totalSalesVolume = staffSales.reduce((sum, s) => sum + (s.amount || 0), 0);
         
-        // --- SMART COMMISSION WATERFALL LOGIC ---
         let earnedCommission = 0;
         let logicLabel = "";
 
         if (member.commission_type === 'fixed') {
-          // Rule: Fixed Amount per sale
           const rate = Number(member.custom_rate) || 0;
           earnedCommission = rate * staffSales.length;
           logicLabel = `₦${rate.toLocaleString()} Fixed x ${staffSales.length}`;
         } else if (member.commission_type === 'percentage' && Number(member.custom_rate) > 0) {
-          // Rule: Individual % override
           const rate = Number(member.custom_rate);
           earnedCommission = totalSalesVolume * (rate / 100);
           logicLabel = `${rate}% of ₦${totalSalesVolume.toLocaleString()}`;
         } else {
-          // Rule: Fallback to Global %
           earnedCommission = totalSalesVolume * (globalRate / 100);
           logicLabel = `${globalRate}% Global Rate`;
         }
@@ -91,7 +80,7 @@ export default function UnifiedPayrollPage() {
 
   const handleRecordPayment = async (member: any) => {
     const monthLabel = selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-    const confirmPay = confirm(`Confirm total payment of ₦${member.totalDue.toLocaleString()} for ${member.name} (${monthLabel})?`);
+    const confirmPay = confirm(`Confirm total payment of ₦${member.totalDue.toLocaleString()} for ${member.name}?`);
     if (confirmPay) {
       await supabase.from("payouts").insert([{
         staff_id: member.id,
@@ -116,11 +105,9 @@ export default function UnifiedPayrollPage() {
 
   return (
     <div className="space-y-8 pb-20">
-      {/* HEADER SECTION */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
           <h1 className="text-3xl font-black text-slate-900 italic uppercase leading-none tracking-tight">Payroll Engine</h1>
-          
           <div className="flex items-center gap-3 mt-4 bg-white border border-slate-200 p-2 rounded-2xl w-fit shadow-sm">
             <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-xl transition-all"><ChevronLeft size={20}/></button>
             <div className="flex items-center gap-2 px-3">
@@ -133,11 +120,14 @@ export default function UnifiedPayrollPage() {
           </div>
         </div>
 
-        <div className="flex gap-3">
-            <a href="/dashboard/staff" className="bg-white border border-slate-200 text-slate-900 px-6 py-4 rounded-2xl font-black flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm">
-                <Settings size={20} /> Configure Staff
-            </a>
-        </div>
+        {/* HIDDEN BUTTON: Only visible if user can manage staff */}
+        {hasPermission('manage_staff') && (
+          <div className="flex gap-3">
+              <a href="/dashboard/staff" className="bg-white border border-slate-200 text-slate-900 px-6 py-4 rounded-2xl font-black flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm">
+                  <Settings size={20} /> Configure Staff
+              </a>
+          </div>
+        )}
       </header>
 
       {/* STAT CARDS */}
@@ -182,7 +172,7 @@ export default function UnifiedPayrollPage() {
                         </div>
                         <div>
                             <p className="font-bold text-slate-900 uppercase leading-none">{member.name}</p>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{member.role}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{member.roles?.name || "Staff"}</span>
                         </div>
                       </div>
                     </td>
@@ -207,17 +197,21 @@ export default function UnifiedPayrollPage() {
                         <button onClick={() => setHistoryStaff(member)} className="p-2 text-slate-300 hover:text-blue-600 transition">
                           <History size={20} />
                         </button>
+                        
+                        {/* HIDDEN ACTION: Only show "PAY NOW" if user has process_payouts permission */}
                         {paid ? (
                           <div className="flex items-center gap-1 text-emerald-500 font-black text-[9px] uppercase bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 shadow-sm">
                             <CheckCircle size={12}/> Disbursed
                           </div>
                         ) : (
-                          <button 
-                            onClick={() => handleRecordPayment(member)} 
-                            className="bg-blue-600 text-white text-[10px] font-black px-6 py-3 rounded-xl hover:bg-slate-900 transition-all shadow-lg shadow-blue-100 active:scale-95"
-                          >
-                            PAY NOW
-                          </button>
+                          hasPermission('process_payouts') && (
+                            <button 
+                              onClick={() => handleRecordPayment(member)} 
+                              className="bg-blue-600 text-white text-[10px] font-black px-6 py-3 rounded-xl hover:bg-slate-900 transition-all shadow-lg active:scale-95"
+                            >
+                              PAY NOW
+                            </button>
+                          )
                         )}
                       </div>
                     </td>
@@ -229,5 +223,14 @@ export default function UnifiedPayrollPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// WRAP ENTIRE PAGE IN PROTECTED ROUTE
+export default function UnifiedPayrollPage() {
+  return (
+    <ProtectedRoute requiredPermission="view_payroll">
+      <PayrollContent />
+    </ProtectedRoute>
   );
 }

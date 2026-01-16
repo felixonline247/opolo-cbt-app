@@ -5,8 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { 
   UserPlus, UserX, Trash2, 
   Loader2, CheckCircle2, AlertCircle,
-  Mail, Lock, Phone, CreditCard, X,
-  Percent, CircleDollarSign, Info, Edit3, Save
+  X, CircleDollarSign, Edit3, Save, ShieldCheck
 } from "lucide-react";
 
 function StaffManagementContent() {
@@ -15,8 +14,8 @@ function StaffManagementContent() {
   const formRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [staffList, setStaffList] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]); // New state for roles
   
-  // --- EDIT MODE STATE ---
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<any>(null);
 
@@ -24,8 +23,7 @@ function StaffManagementContent() {
     full_name: "",
     email: "",
     password: "",
-    phone: "",
-    payment_type: "Monthly Salary",
+    role_id: "", // Changed from 'role' string to 'role_id' UUID
     monthly_salary: "",
     commission_type: "percentage", 
     custom_rate: ""
@@ -38,34 +36,25 @@ function StaffManagementContent() {
     if (action === "new" && formRef.current) {
       formRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
     }
+    fetchInitialData();
   }, [searchParams]);
 
-  useEffect(() => {
-    fetchStaffData();
-  }, []);
-
-  async function fetchStaffData() {
+  async function fetchInitialData() {
     setLoading(true);
-    const { data: staffFromDb } = await supabase.from("staff").select("*").order("name");
-    const { data: sales } = await supabase.from("sales").select("staff_name");
-    
-    const stats = sales?.reduce((acc: any, sale: any) => {
-      const name = sale.staff_name || "Unknown";
-      acc[name] = (acc[name] || 0) + 1;
-      return acc;
-    }, {});
+    // 1. Fetch Roles
+    const { data: rolesData } = await supabase.from("roles").select("*").order("name");
+    if (rolesData) setRoles(rolesData);
 
-    if (staffFromDb) {
-      const formattedStaff = staffFromDb.map(s => ({
-        ...s,
-        salesCount: stats?.[s.name] || 0
-      }));
-      setStaffList(formattedStaff);
-    }
+    // 2. Fetch Staff (joining with roles table)
+    const { data: staffFromDb } = await supabase
+      .from("staff")
+      .select(`*, roles(name)`)
+      .order("name");
+    
+    if (staffFromDb) setStaffList(staffFromDb);
     setLoading(false);
   }
 
-  // --- UPDATE LOGIC ---
   const handleUpdateStaff = async (id: string) => {
     setLoading(true);
     const { error } = await supabase
@@ -73,14 +62,15 @@ function StaffManagementContent() {
       .update({
         monthly_salary: parseFloat(editData.monthly_salary) || 0,
         commission_type: editData.commission_type,
-        custom_rate: parseFloat(editData.custom_rate) || 0
+        custom_rate: parseFloat(editData.custom_rate) || 0,
+        role_id: editData.role_id // Update role
       })
       .eq("id", id);
 
     if (!error) {
       setMessage({ text: "Staff updated successfully", type: "success" });
       setEditingId(null);
-      fetchStaffData();
+      fetchInitialData();
     } else {
       setMessage({ text: error.message, type: "error" });
     }
@@ -89,6 +79,10 @@ function StaffManagementContent() {
 
   const handleCreateStaff = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!employeeData.role_id) {
+        setMessage({ text: "Please select a role", type: "error" });
+        return;
+    }
     setLoading(true);
     
     const { error: authError } = await supabase.auth.signUp({
@@ -106,7 +100,7 @@ function StaffManagementContent() {
     const { error: dbError } = await supabase.from("staff").insert([{
       name: employeeData.full_name,
       email: employeeData.email,
-      role: "Staff",
+      role_id: employeeData.role_id, // Link to role UUID
       monthly_salary: parseFloat(employeeData.monthly_salary) || 0,
       commission_type: employeeData.commission_type,
       custom_rate: parseFloat(employeeData.custom_rate) || 0,
@@ -117,19 +111,19 @@ function StaffManagementContent() {
     } else {
       setMessage({ text: "Staff account created successfully!", type: "success" });
       setEmployeeData({
-        full_name: "", email: "", password: "", phone: "", 
-        payment_type: "Monthly Salary", monthly_salary: "", 
+        full_name: "", email: "", password: "",
+        role_id: "", monthly_salary: "", 
         commission_type: "percentage", custom_rate: ""
       });
-      fetchStaffData();
+      fetchInitialData();
     }
     setLoading(false);
   };
 
   const handleDeleteStaff = async (id: string, name: string) => {
-    if (confirm(`Permanentely remove ${name} from system?`)) {
+    if (confirm(`Permanently remove ${name}?`)) {
       await supabase.from("staff").delete().eq("id", id);
-      fetchStaffData();
+      fetchInitialData();
     }
   };
 
@@ -139,7 +133,7 @@ function StaffManagementContent() {
     <div className="space-y-10 pb-20">
       <header>
         <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase italic leading-none">Staff Management</h1>
-        <p className="text-slate-500 font-medium mt-2">Control access and monitor performance.</p>
+        <p className="text-slate-500 font-medium mt-2">Assign roles and manage compensation.</p>
       </header>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
@@ -165,6 +159,17 @@ function StaffManagementContent() {
                </div>
             </div>
 
+            {/* ROLE SELECTOR */}
+            <div className="space-y-1">
+              <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Assigned Role</p>
+              <select required value={employeeData.role_id} onChange={e => setEmployeeData({...employeeData, role_id: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Select a Role...</option>
+                {roles.map(role => (
+                    <option key={role.id} value={role.id}>{role.name}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="space-y-1">
               <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Monthly Base Salary (₦)</p>
               <input type="number" required value={employeeData.monthly_salary} onChange={e => setEmployeeData({...employeeData, monthly_salary: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border rounded-2xl font-bold outline-none" placeholder="0.00" />
@@ -180,7 +185,7 @@ function StaffManagementContent() {
                   <option value="percentage">Percentage (%)</option>
                   <option value="fixed">Fixed (₦)</option>
                 </select>
-                <input type="number" value={employeeData.custom_rate} onChange={e => setEmployeeData({...employeeData, custom_rate: e.target.value})} className="w-full p-3 bg-white border border-blue-200 rounded-xl font-bold text-xs outline-none" placeholder="0 = Global" />
+                <input type="number" value={employeeData.custom_rate} onChange={e => setEmployeeData({...employeeData, custom_rate: e.target.value})} className="w-full p-3 bg-white border border-blue-200 rounded-xl font-bold text-xs outline-none" placeholder="Rate" />
               </div>
             </div>
 
@@ -202,31 +207,36 @@ function StaffManagementContent() {
           </form>
         </div>
 
-        {/* STAFF LIST TABLE WITH INLINE EDITING */}
+        {/* STAFF LIST TABLE */}
         <div className="xl:col-span-2 bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
           <table className="w-full text-left">
             <thead className="bg-slate-50 text-[10px] uppercase font-black text-slate-400">
               <tr>
-                <th className="p-6">Staff Member</th>
+                <th className="p-6">Staff & Role</th>
                 <th className="p-6">Earnings Detail</th>
                 <th className="p-6 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {staffList.map((staff, i) => (
-                <tr key={i} className="group hover:bg-slate-50/50 transition-colors">
+                <tr key={staff.id} className="group hover:bg-slate-50/50 transition-colors">
                   <td className="p-6">
                     <p className="font-bold text-slate-900 uppercase leading-none">{staff.name}</p>
-                    <span className="text-[9px] font-black uppercase text-blue-500 bg-blue-50 px-2 py-0.5 rounded mt-1 inline-block">{staff.role}</span>
+                    {editingId === staff.id ? (
+                      <select value={editData.role_id} onChange={e => setEditData({...editData, role_id: e.target.value})} className="mt-2 p-1 text-[10px] font-bold border rounded-lg bg-white">
+                        {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      </select>
+                    ) : (
+                      <span className="text-[9px] font-black uppercase text-blue-500 bg-blue-50 px-2 py-0.5 rounded mt-1 inline-block">
+                        {staff.roles?.name || "No Role"}
+                      </span>
+                    )}
                   </td>
                   
                   <td className="p-6">
                     {editingId === staff.id ? (
-                      <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
-                        <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border">
-                          <span className="text-[10px] font-black px-2">₦</span>
-                          <input type="number" value={editData.monthly_salary} onChange={e => setEditData({...editData, monthly_salary: e.target.value})} className="bg-transparent outline-none font-bold text-xs w-24" />
-                        </div>
+                      <div className="flex flex-col gap-2">
+                        <input type="number" value={editData.monthly_salary} onChange={e => setEditData({...editData, monthly_salary: e.target.value})} className="p-1 border rounded-lg font-bold text-xs w-28" />
                         <div className="flex gap-2">
                           <select value={editData.commission_type} onChange={e => setEditData({...editData, commission_type: e.target.value})} className="p-1 border rounded-lg text-[10px] font-bold bg-white">
                             <option value="percentage">%</option>
@@ -249,10 +259,10 @@ function StaffManagementContent() {
                     <div className="flex justify-end items-center gap-2">
                       {editingId === staff.id ? (
                         <>
-                          <button onClick={() => handleUpdateStaff(staff.id)} className="p-2.5 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-100 hover:bg-emerald-600 transition-all active:scale-95">
+                          <button onClick={() => handleUpdateStaff(staff.id)} className="p-2.5 bg-emerald-500 text-white rounded-xl shadow-lg hover:bg-emerald-600 transition-all">
                             <Save size={18} />
                           </button>
-                          <button onClick={() => setEditingId(null)} className="p-2.5 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all">
+                          <button onClick={() => setEditingId(null)} className="p-2.5 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200">
                             <X size={18} />
                           </button>
                         </>
