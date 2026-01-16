@@ -2,14 +2,17 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation"; 
 import { supabase } from "@/lib/supabase";
+import { usePermissions } from "@/hooks/usePermissions"; // Added
+import ProtectedRoute from "@/components/ProtectedRoute"; // Added
 import { 
-  Plus, X, Loader2, Search,
+  Plus, X, Loader2, Search, Trash2, Edit3,
   Banknote, Settings, Smartphone, Landmark 
 } from "lucide-react";
 import ReceiptModal from "@/components/ReceiptModal";
 
-export default function SalesPage() {
+function SalesContent() {
   const router = useRouter();
+  const { hasPermission } = usePermissions(); // Initialize permissions
   
   // --- AUTH & USER STATE ---
   const [currentStaff, setCurrentStaff] = useState<string>("System");
@@ -91,7 +94,6 @@ export default function SalesPage() {
     if (!service) return alert("Please select a service");
     setLoading(true);
 
-    // Inventory Check for JAMB
     if (service === "JAMB CBT Prep") {
       const { data: invItem } = await supabase.from("inventory").select("id, stock_quantity").eq("item_name", "JAMB Profile Code").single();
       if (invItem && invItem.stock_quantity <= 0) {
@@ -114,7 +116,6 @@ export default function SalesPage() {
     const { data, error } = await supabase.from("sales").insert([salePayload]).select();
 
     if (!error) {
-      // Mark client as PAID automatically
       await supabase.from("clients").update({ payment_status: "Paid", last_service: service }).eq("id", selectedClientId);
       setActiveReceipt({ ...salePayload, id: data[0].id });
       setShowReceipt(true);
@@ -150,42 +151,58 @@ export default function SalesPage() {
           <p className="text-slate-500 font-medium italic">Opolo CBT Resort Management</p>
         </div>
         <div className="flex gap-3 w-full lg:w-auto">
-          <button onClick={() => router.push('/dashboard/settings/services')} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-600 px-6 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all">
-            <Settings size={20} /> Services
-          </button>
-          <button onClick={() => setIsModalOpen(true)} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold shadow-xl hover:bg-blue-700 transition-all active:scale-95">
-            <Plus size={20} /> Record Sale
-          </button>
+          {/* ONLY SHOW SERVICES TO ADMINS/MANAGERS */}
+          {hasPermission('manage_settings') && (
+            <button onClick={() => router.push('/dashboard/settings/services')} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-600 px-6 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all">
+              <Settings size={20} /> Services
+            </button>
+          )}
+
+          {/* ONLY SHOW RECORD SALE IF THEY HAVE PERMISSION */}
+          {hasPermission('create_sales') && (
+            <button onClick={() => setIsModalOpen(true)} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold shadow-xl hover:bg-blue-700 transition-all active:scale-95">
+              <Plus size={20} /> Record Sale
+            </button>
+          )}
         </div>
       </header>
 
-      {/* STATS */}
+      {/* STATS - Only show full profit stats to managers/admins */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
             <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total Collections</p>
             <p className="text-2xl font-black text-slate-900">₦{totalRevenue.toLocaleString()}</p>
           </div>
-          <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
-            <p className="text-[10px] font-black uppercase text-orange-500 mb-1">Institution Share</p>
-            <p className="text-2xl font-black text-orange-600">₦{totalPartnerCost.toLocaleString()}</p>
-          </div>
-          <div className="bg-slate-900 p-6 rounded-[2rem] shadow-xl">
-            <p className="text-[10px] font-black uppercase text-blue-400 mb-1">Net Profit</p>
-            <p className="text-2xl font-black text-white">₦{netProfit.toLocaleString()}</p>
-          </div>
+          
+          {hasPermission('view_reports') && (
+            <>
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+                <p className="text-[10px] font-black uppercase text-orange-500 mb-1">Institution Share</p>
+                <p className="text-2xl font-black text-orange-600">₦{totalPartnerCost.toLocaleString()}</p>
+              </div>
+              <div className="bg-slate-900 p-6 rounded-[2rem] shadow-xl">
+                <p className="text-[10px] font-black uppercase text-blue-400 mb-1">Net Profit</p>
+                <p className="text-2xl font-black text-white">₦{netProfit.toLocaleString()}</p>
+              </div>
+            </>
+          )}
       </div>
 
+      {/* MODAL & TABLE Logic */}
+      {/* ... (Modal logic remains mostly same as it's triggered by the button we already protected) ... */}
+      
       {/* MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          {/* ... Modal Content ... */}
           <div className="bg-white w-full max-w-5xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col md:flex-row relative">
             <button onClick={() => setIsModalOpen(false)} className="absolute top-6 right-6 z-10 text-slate-400 hover:text-slate-900"><X size={28} /></button>
             <div className="p-10 flex-1 space-y-6">
               <h2 className="text-3xl font-black italic uppercase tracking-tighter">New Transaction</h2>
-              
               <div className="space-y-4">
+                {/* Student Selection */}
                 <div className="space-y-1">
-                    <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Find Student (Name or Phone)</p>
+                    <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Find Student</p>
                     <div className="relative mb-2">
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                       <input 
@@ -193,54 +210,47 @@ export default function SalesPage() {
                         placeholder="Type to filter..." 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none"
                       />
                     </div>
                     <select 
                       value={selectedClientId}
                       onChange={(e) => handleClientChange(e.target.value)} 
-                      className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                      className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold appearance-none"
                     >
-                      <option value="">-- {filteredClients.length} students found --</option>
-                      {filteredClients.map(c => (
-                        <option key={c.id} value={c.id}>{c.name.toUpperCase()} — {c.phone || "No Phone"}</option>
-                      ))}
+                      <option value="">-- Select Student --</option>
+                      {filteredClients.map(c => <option key={c.id} value={c.id}>{c.name.toUpperCase()}</option>)}
                     </select>
                 </div>
 
+                {/* Service Selection */}
                 <div className="space-y-1">
                     <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Select Service</p>
-                    <select 
-                      value={service}
-                      onChange={(e) => handleServiceChange(e.target.value)} 
-                      className="w-full px-5 py-4 bg-blue-50/50 border border-blue-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-blue-900"
-                    >
+                    <select value={service} onChange={(e) => handleServiceChange(e.target.value)} className="w-full px-5 py-4 bg-blue-50/50 border border-blue-100 rounded-2xl font-bold appearance-none text-blue-900">
                       <option value="">-- Choose Preset --</option>
-                      {servicePresets.map(p => (
-                        <option key={p.id} value={p.service_name}>{p.service_name.toUpperCase()}</option>
-                      ))}
+                      {servicePresets.map(p => <option key={p.id} value={p.service_name}>{p.service_name.toUpperCase()}</option>)}
                     </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Amount (₦)</p>
-                    <input type="number" value={amount} readOnly className="w-full px-5 py-4 bg-slate-100 border rounded-2xl font-black text-slate-600 outline-none cursor-not-allowed" />
+                    <input type="number" value={amount} readOnly className="w-full px-5 py-4 bg-slate-100 border rounded-2xl font-black text-slate-600" />
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Inst. Split (₦)</p>
-                    <input type="number" value={institutionCost} readOnly className="w-full px-5 py-4 bg-slate-100 border rounded-2xl font-black text-slate-600 outline-none cursor-not-allowed" />
-                  </div>
+                  {hasPermission('view_reports') && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-black text-slate-400 ml-2 uppercase">Inst. Split (₦)</p>
+                      <input type="number" value={institutionCost} readOnly className="w-full px-5 py-4 bg-slate-100 border rounded-2xl font-black text-slate-600" />
+                    </div>
+                  )}
                 </div>
 
+                {/* Payment Channel */}
                 <div className="space-y-3">
                   <p className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Payment Channel</p>
                   <div className="grid grid-cols-3 gap-3">
                     {['Cash', 'POS', 'Transfer'].map((m) => (
                       <button key={m} type="button" onClick={() => setPaymentMethod(m)} className={`flex flex-col items-center p-4 rounded-2xl border-2 transition-all ${paymentMethod === m ? "border-blue-600 bg-blue-50 text-blue-600" : "border-slate-50 text-slate-400"}`}>
-                        {m === 'Cash' && <Banknote size={20} />}
-                        {m === 'POS' && <Smartphone size={20} />}
-                        {m === 'Transfer' && <Landmark size={20} />}
                         <span className="text-[10px] font-black uppercase mt-1">{m}</span>
                       </button>
                     ))}
@@ -253,9 +263,9 @@ export default function SalesPage() {
               </button>
             </div>
 
+            {/* Side Preview (Protected) */}
             <div className="bg-slate-900 p-10 text-white w-full md:w-80 flex flex-col justify-center border-l border-slate-800">
-                <p className="text-[10px] uppercase font-black text-blue-500 mb-2 italic">Net Profit Preview</p>
-                <h3 className="text-4xl font-black text-emerald-400 mb-6 tracking-tighter">₦{(Number(amount) - Number(institutionCost)).toLocaleString()}</h3>
+                <p className="text-[10px] uppercase font-black text-blue-500 mb-2 italic">Cashier Session</p>
                 <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700">
                   <p className="text-[10px] uppercase font-black text-slate-500 mb-1">Staff In Charge</p>
                   <p className="font-bold text-white uppercase text-xs">{currentStaff}</p>
@@ -272,26 +282,46 @@ export default function SalesPage() {
             <tr>
               <th className="p-6">Date</th>
               <th className="p-6">Student & Service</th>
-              <th className="p-6">Method</th>
               <th className="p-6 text-right">Amount Paid</th>
-              <th className="p-6 text-right">Inst. Split</th>
-              <th className="p-6 text-right">Net Profit</th>
+              {hasPermission('view_reports') && (
+                <>
+                  <th className="p-6 text-right">Inst. Split</th>
+                  <th className="p-6 text-right">Net Profit</th>
+                </>
+              )}
+              <th className="p-6 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
             {sales.map((sale) => (
-              <tr key={sale.id} className="hover:bg-slate-50/50">
-                <td className="p-6 text-xs text-slate-400 whitespace-nowrap">{new Date(sale.created_at).toLocaleDateString()}</td>
+              <tr key={sale.id} className="hover:bg-slate-50/50 group">
+                <td className="p-6 text-xs text-slate-400">{new Date(sale.created_at).toLocaleDateString()}</td>
                 <td className="p-6">
                     <p className="font-bold text-slate-900 uppercase">{sale.client_name}</p>
-                    <p className="text-[9px] text-blue-600 font-bold uppercase">{sale.service}</p>
-                </td>
-                <td className="p-6">
-                    <span className="text-[9px] font-black px-2 py-1 bg-slate-100 rounded uppercase">{sale.payment_method}</span>
+                    <p className="text-[9px] text-blue-600 font-bold uppercase">{sale.service} • {sale.payment_method}</p>
                 </td>
                 <td className="p-6 text-right font-bold text-slate-900">₦{sale.amount.toLocaleString()}</td>
-                <td className="p-6 text-right font-bold text-orange-500">₦{sale.institution_cost.toLocaleString()}</td>
-                <td className="p-6 text-right font-black text-emerald-600 bg-emerald-50/30">₦{(sale.amount - sale.institution_cost).toLocaleString()}</td>
+                
+                {hasPermission('view_reports') && (
+                  <>
+                    <td className="p-6 text-right font-bold text-orange-500">₦{sale.institution_cost.toLocaleString()}</td>
+                    <td className="p-6 text-right font-black text-emerald-600 bg-emerald-50/30">₦{(sale.amount - sale.institution_cost).toLocaleString()}</td>
+                  </>
+                )}
+
+                <td className="p-6 text-right">
+                  <div className="flex justify-end gap-2">
+                    {hasPermission('edit_sales') && (
+                      <button className="p-2 text-slate-400 hover:text-blue-600"><Edit3 size={16}/></button>
+                    )}
+                    {hasPermission('delete_sales') && (
+                      <button className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
+                    )}
+                    {(!hasPermission('edit_sales') && !hasPermission('delete_sales')) && (
+                       <span className="text-[9px] font-black text-slate-300 uppercase italic">Logged</span>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -302,5 +332,14 @@ export default function SalesPage() {
         <ReceiptModal saleData={activeReceipt} onClose={() => setShowReceipt(false)} />
       )}
     </div>
+  );
+}
+
+// WRAP WITH PROTECTED ROUTE
+export default function SalesPage() {
+  return (
+    <ProtectedRoute requiredPermission="view_sales">
+      <SalesContent />
+    </ProtectedRoute>
   );
 }
