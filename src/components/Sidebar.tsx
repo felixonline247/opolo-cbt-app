@@ -1,8 +1,8 @@
 "use client";
-import { LayoutDashboard, Users, Banknote, ShieldCheck, LogOut, Lock } from "lucide-react";
+import { LayoutDashboard, Users, Banknote, ShieldCheck, LogOut, Lock, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { usePermissions } from "@/hooks/usePermissions"; // Added permissions hook
+import { usePermissions } from "@/hooks/usePermissions";
 
 const menuItems = [
   { 
@@ -15,7 +15,7 @@ const menuItems = [
     name: "Students", 
     icon: <Users size={20} />, 
     path: "/dashboard/clients",
-    perm: "manage_staff" // Usually grouped with staff management or general viewing
+    perm: "manage_staff" 
   },
   { 
     name: "Sales Ledger", 
@@ -30,10 +30,16 @@ const menuItems = [
     perm: "manage_staff" 
   },
   { 
+    name: "Staff Payroll", 
+    icon: <Wallet size={20} />, 
+    path: "/dashboard/payroll", 
+    perm: "view_payroll" 
+  },
+  { 
     name: "Access Control", 
     icon: <Lock size={20} />, 
     path: "/dashboard/settings/roles", 
-    perm: "manage_settings" // Only Admins see this
+    perm: "manage_settings" 
   },
 ];
 
@@ -51,10 +57,11 @@ export default function Sidebar() {
 
       <nav className="flex-1 space-y-2">
         {menuItems.map((item) => {
-          // Check if user has permission for this specific link
+          // If we are still loading, don't hide the menu yet to avoid layout shift
+          // but if loading is done and they don't have permission, hide it.
           const canSee = hasPermission(item.perm);
 
-          if (!canSee) return null;
+          if (!loading && !canSee) return null;
 
           return (
             <Link
