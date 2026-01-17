@@ -8,27 +8,52 @@ export function usePermissions() {
 
   useEffect(() => {
     async function getRole() {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("staff")
-          .select(`*, roles(name, permissions)`)
-          .eq("email", user.email)
-          .single();
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
         
-        setUserRole(staffData?.roles);
+        if (!user) {
+          setLoading(false);
+          return;
+        }
+
+        const { data: staffData, error } = await supabase
+          .from("staff")
+          .select(`
+            *,
+            roles (
+              name,
+              permissions
+            )
+          `)
+          .eq("email", user.email?.toLowerCase()) // Case-insensitive match
+          .single();
+
+        if (error) {
+          console.error("Permission Hook Error:", error.message);
+        }
+
+        if (staffData && staffData.roles) {
+          setUserRole(staffData.roles);
+        }
+      } catch (err) {
+        console.error("Unexpected Error in usePermissions:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     getRole();
   }, []);
 
   const hasPermission = (permission: string) => {
-    if (!userRole) return false;
-    // Admins with "all" bypass all checks
-    if (userRole.permissions?.includes("all")) return true;
-    return userRole.permissions?.includes(permission);
+    // While loading, we shouldn't assume permission, but we also shouldn't block 
+    // the system if we haven't finished the check yet.
+    if (loading) return false; 
+    
+    if (!userRole || !userRole.permissions) return false;
+
+    // Check for global admin "all" or specific permission
+    const perms = userRole.permissions;
+    return perms.includes("all") || perms.includes(permission);
   };
 
   return { hasPermission, loading, roleName: userRole?.name };
