@@ -25,7 +25,7 @@ export function usePermissions() {
               permissions
             )
           `)
-          .eq("email", user.email?.toLowerCase()) // Case-insensitive match
+          .eq("email", user.email?.toLowerCase())
           .single();
 
         if (error) {
@@ -45,15 +45,31 @@ export function usePermissions() {
   }, []);
 
   const hasPermission = (permission: string) => {
-    // While loading, we shouldn't assume permission, but we also shouldn't block 
-    // the system if we haven't finished the check yet.
-    if (loading) return false; 
+    // 1. If still loading, return true temporarily to prevent 
+    // ProtectedRoute from redirecting before the data arrives
+    if (loading) return true; 
     
     if (!userRole || !userRole.permissions) return false;
 
-    // Check for global admin "all" or specific permission
-    const perms = userRole.permissions;
-    return perms.includes("all") || perms.includes(permission);
+    // 2. Ensure perms is an array (handles JSONB vs String cases)
+    let perms = userRole.permissions;
+    if (typeof perms === 'string') {
+      try {
+        perms = JSON.parse(perms);
+      } catch (e) {
+        perms = [];
+      }
+    }
+
+    if (!Array.isArray(perms)) return false;
+
+    // 3. Robust Check: Lowercase everything for a perfect match
+    const normalizedPerms = perms.map((p: string) => p.toLowerCase());
+    
+    return (
+      normalizedPerms.includes("all") || 
+      normalizedPerms.includes(permission.toLowerCase())
+    );
   };
 
   return { hasPermission, loading, roleName: userRole?.name };
