@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { usePermissions } from "@/hooks/usePermissions"; // Import the hook
-import ProtectedRoute from "@/components/ProtectedRoute"; // Import the wrapper
+import { usePermissions } from "@/hooks/usePermissions";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import { 
   Wallet, Clock, CheckCircle, Search, 
   Loader2, Plus, History, X, CalendarDays, Printer,
@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 function PayrollContent() {
-  const { hasPermission } = usePermissions(); // Initialize permission check
+  const { hasPermission } = usePermissions();
   const [loading, setLoading] = useState(true);
   const [staff, setStaff] = useState<any[]>([]);
   const [payouts, setPayouts] = useState<any[]>([]);
@@ -21,56 +21,65 @@ function PayrollContent() {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data: settings } = await supabase.from('settings').select('commission_rate').single();
-    const globalRate = settings?.commission_rate || 0;
-    setGlobalCommissionRate(globalRate);
+    try {
+      // 1. Fetch Global Settings
+      const { data: settings } = await supabase.from('settings').select('commission_rate').single();
+      const globalRate = settings?.commission_rate || 0;
+      setGlobalCommissionRate(globalRate);
 
-    const startOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1).toISOString();
-    const endOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0, 23, 59, 59).toISOString();
+      // 2. Define Date Range
+      const startOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1).toISOString();
+      const endOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
-    const { data: staffData } = await supabase.from("staff").select("*, roles(name)").order('name');
-    const { data: payoutData } = await supabase.from("payouts").select("*").order('created_at', { ascending: false });
-    const { data: salesData } = await supabase
-      .from("sales")
-      .select("staff_name, amount, created_at")
-      .gte('created_at', startOfMonth)
-      .lte('created_at', endOfMonth);
+      // 3. Parallel Data Fetching
+      const [staffRes, payoutRes, salesRes] = await Promise.all([
+        supabase.from("staff").select("*, roles(name)").order('name'),
+        supabase.from("payouts").select("*").order('created_at', { ascending: false }),
+        supabase.from("sales")
+          .select("staff_name, amount, created_at")
+          .gte('created_at', startOfMonth)
+          .lte('created_at', endOfMonth)
+      ]);
 
-    if (staffData) {
-      const enrichedStaff = staffData.map(member => {
-        const staffSales = salesData?.filter(s => s.staff_name === member.name) || [];
-        const totalSalesVolume = staffSales.reduce((sum, s) => sum + (s.amount || 0), 0);
-        
-        let earnedCommission = 0;
-        let logicLabel = "";
+      if (staffRes.data) {
+        const enrichedStaff = staffRes.data.map(member => {
+          const staffSales = salesRes.data?.filter(s => s.staff_name === member.name) || [];
+          const totalSalesVolume = staffSales.reduce((sum, s) => sum + (s.amount || 0), 0);
+          
+          let earnedCommission = 0;
+          let logicLabel = "";
 
-        if (member.commission_type === 'fixed') {
-          const rate = Number(member.custom_rate) || 0;
-          earnedCommission = rate * staffSales.length;
-          logicLabel = `₦${rate.toLocaleString()} Fixed x ${staffSales.length}`;
-        } else if (member.commission_type === 'percentage' && Number(member.custom_rate) > 0) {
-          const rate = Number(member.custom_rate);
-          earnedCommission = totalSalesVolume * (rate / 100);
-          logicLabel = `${rate}% of ₦${totalSalesVolume.toLocaleString()}`;
-        } else {
-          earnedCommission = totalSalesVolume * (globalRate / 100);
-          logicLabel = `${globalRate}% Global Rate`;
-        }
+          if (member.commission_type === 'fixed') {
+            const rate = Number(member.custom_rate) || 0;
+            earnedCommission = rate * staffSales.length;
+            logicLabel = `₦${rate.toLocaleString()} Fixed x ${staffSales.length}`;
+          } else if (member.commission_type === 'percentage' && Number(member.custom_rate) > 0) {
+            const rate = Number(member.custom_rate);
+            earnedCommission = totalSalesVolume * (rate / 100);
+            logicLabel = `${rate}% of ₦${totalSalesVolume.toLocaleString()}`;
+          } else {
+            earnedCommission = totalSalesVolume * (globalRate / 100);
+            logicLabel = `${globalRate}% Global Rate`;
+          }
 
-        return {
-          ...member,
-          salesCount: staffSales.length,
-          totalSalesVolume,
-          earnedCommission,
-          logicLabel,
-          totalDue: (Number(member.monthly_salary) || 0) + earnedCommission
-        };
-      });
-      setStaff(enrichedStaff);
+          return {
+            ...member,
+            salesCount: staffSales.length,
+            totalSalesVolume,
+            earnedCommission,
+            logicLabel,
+            totalDue: (Number(member.monthly_salary) || 0) + earnedCommission
+          };
+        });
+        setStaff(enrichedStaff);
+      }
+
+      if (payoutRes.data) setPayouts(payoutRes.data);
+    } catch (error) {
+      console.error("Payroll Data Fetch Error:", error);
+    } finally {
+      setLoading(false);
     }
-
-    if (payoutData) setPayouts(payoutData);
-    setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, [selectedDate]);
@@ -82,13 +91,13 @@ function PayrollContent() {
     const monthLabel = selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' });
     const confirmPay = confirm(`Confirm total payment of ₦${member.totalDue.toLocaleString()} for ${member.name}?`);
     if (confirmPay) {
-      await supabase.from("payouts").insert([{
+      const { error } = await supabase.from("payouts").insert([{
         staff_id: member.id,
         amount_paid: member.totalDue,
         month_for: monthLabel,
         status: 'Paid'
       }]);
-      fetchData();
+      if (!error) fetchData();
     }
   };
 
@@ -120,7 +129,6 @@ function PayrollContent() {
           </div>
         </div>
 
-        {/* HIDDEN BUTTON: Only visible if user can manage staff */}
         {hasPermission('manage_staff') && (
           <div className="flex gap-3">
               <a href="/dashboard/staff" className="bg-white border border-slate-200 text-slate-900 px-6 py-4 rounded-2xl font-black flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm">
@@ -130,7 +138,6 @@ function PayrollContent() {
         )}
       </header>
 
-      {/* STAT CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
           <p className="text-[10px] font-black uppercase opacity-60 tracking-widest mb-1">Total Month Payout</p>
@@ -147,7 +154,6 @@ function PayrollContent() {
         </div>
       </div>
 
-      {/* MAIN TABLE */}
       <div className="bg-white rounded-[3rem] border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -198,7 +204,6 @@ function PayrollContent() {
                           <History size={20} />
                         </button>
                         
-                        {/* HIDDEN ACTION: Only show "PAY NOW" if user has process_payouts permission */}
                         {paid ? (
                           <div className="flex items-center gap-1 text-emerald-500 font-black text-[9px] uppercase bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 shadow-sm">
                             <CheckCircle size={12}/> Disbursed
@@ -226,7 +231,9 @@ function PayrollContent() {
   );
 }
 
-// WRAP ENTIRE PAGE IN PROTECTED ROUTE
+// ---------------------------------------------------------
+// STREAMLINED EXPORT
+// ---------------------------------------------------------
 export default function UnifiedPayrollPage() {
   return (
     <ProtectedRoute requiredPermission="view_payroll">
