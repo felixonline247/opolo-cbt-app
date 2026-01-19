@@ -45,31 +45,26 @@ export function usePermissions() {
   }, []);
 
   const hasPermission = (permission: string) => {
-    // 1. If still loading, return true temporarily to prevent 
-    // ProtectedRoute from redirecting before the data arrives
+    // 1. Stay open while loading to prevent premature redirects
     if (loading) return true; 
     
     if (!userRole || !userRole.permissions) return false;
 
-    // 2. Ensure perms is an array (handles JSONB vs String cases)
-    let perms = userRole.permissions;
-    if (typeof perms === 'string') {
-      try {
-        perms = JSON.parse(perms);
-      } catch (e) {
-        perms = [];
-      }
-    }
-
-    if (!Array.isArray(perms)) return false;
-
-    // 3. Robust Check: Lowercase everything for a perfect match
-    const normalizedPerms = perms.map((p: string) => p.toLowerCase());
+    /**
+     * FLEXIBLE CHECK:
+     * We stringify the permissions and search for the key. 
+     * This handles:
+     * - Real JSONB arrays: ["all"]
+     * - Stringified arrays: '["all"]'
+     * - Case sensitivity: "ALL" vs "all"
+     */
+    const permsString = JSON.stringify(userRole.permissions).toLowerCase();
     
-    return (
-      normalizedPerms.includes("all") || 
-      normalizedPerms.includes(permission.toLowerCase())
-    );
+    // Check for the master "all" key
+    if (permsString.includes('"all"')) return true;
+    
+    // Check for the specific permission key requested
+    return permsString.includes(`"${permission.toLowerCase()}"`);
   };
 
   return { hasPermission, loading, roleName: userRole?.name };
